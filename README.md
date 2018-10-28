@@ -36,129 +36,125 @@ You can easily install it from powershell gallery repository https://www.powersh
 
 ## Exported Functions and Alias
 ###Functions
-CommandType     Name                                               Version    Source
------------     ----                                               -------    ------
-Function        Get-FreeIPAAPIAuthenticationCookie                 0.0        Manage-FreeIPA
-Function        Import-FreeIPAAPICrendentials                      0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPI                                  0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIConfig_Mod                        0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIConfig_Show                       0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIEnv                               0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIGroup_Add                         0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIGroup_Add_Member                  0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIGroup_Del                         0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIGroup_Find                        0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIGroup_Mod                         0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIGroup_Remove_Member               0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIGroup_Show                        0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIHost_Add                          0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIHost_Del                          0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIHost_Mod                          0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIHost_Show                         0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIPasswd                            0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIPermission_Add                    0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIPermission_Add_Member             0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIPermission_Add_Noaci              0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIPermission_Find                   0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIPermission_Mod                    0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIPermission_Remove_Member          0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIPermission_Show                   0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIPrivilege_Add                     0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIPrivilege_Add_Member              0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIPrivilege_Add_Permission          0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIPrivilege_Del                     0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIPrivilege_Find                    0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIPrivilege_Mod                     0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIPrivilege_Remove_Member           0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIPrivilege_Remove_Permission       0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIPrivilege_Show                    0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIRole_Add                          0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIRole_Add_Member                   0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIRole_Add_Privilege                0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIRole_Del                          0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIRole_Find                         0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIRole_Mod                          0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIRole_Remove_Member                0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIRole_Remove_Privilege             0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIRole_Show                         0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPISessionLogout                     0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIUser_Add                          0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIUser_Del                          0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIUser_Disable                      0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIUser_Enable                       0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIUser_Find                         0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIUser_Mod                          0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIUser_Show                         0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIUser_Status                       0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAAPIUser_Unlock                       0.0        Manage-FreeIPA
-Function        Invoke-FreeIPAHost_Find                            0.0        Manage-FreeIPA
-Function        Set-FreeIPAAPICredentials                          0.0        Manage-FreeIPA
-Function        Set-FreeIPAAPIServerConfig                         0.0        Manage-FreeIPA
+- Get-FreeIPAAPIAuthenticationCookie                 
+- Import-FreeIPAAPICrendentials                      
+- Invoke-FreeIPAAPI                                  
+- Invoke-FreeIPAAPIConfig_Mod                        
+- Invoke-FreeIPAAPIConfig_Show                       
+- Invoke-FreeIPAAPIEnv                               
+- Invoke-FreeIPAAPIGroup_Add                         
+- Invoke-FreeIPAAPIGroup_Add_Member                  
+- Invoke-FreeIPAAPIGroup_Del                         
+- Invoke-FreeIPAAPIGroup_Find                        
+- Invoke-FreeIPAAPIGroup_Mod                         
+- Invoke-FreeIPAAPIGroup_Remove_Member               
+- Invoke-FreeIPAAPIGroup_Show                        
+- Invoke-FreeIPAAPIHost_Add                          
+- Invoke-FreeIPAAPIHost_Del                          
+- Invoke-FreeIPAAPIHost_Mod                          
+- Invoke-FreeIPAAPIHost_Show                         
+- Invoke-FreeIPAAPIPasswd                            
+- Invoke-FreeIPAAPIPermission_Add                    
+- Invoke-FreeIPAAPIPermission_Add_Member             
+- Invoke-FreeIPAAPIPermission_Add_Noaci              
+- Invoke-FreeIPAAPIPermission_Find                   
+- Invoke-FreeIPAAPIPermission_Mod                    
+- Invoke-FreeIPAAPIPermission_Remove_Member          
+- Invoke-FreeIPAAPIPermission_Show                   
+- Invoke-FreeIPAAPIPrivilege_Add                     
+- Invoke-FreeIPAAPIPrivilege_Add_Member              
+- Invoke-FreeIPAAPIPrivilege_Add_Permission          
+- Invoke-FreeIPAAPIPrivilege_Del                     
+- Invoke-FreeIPAAPIPrivilege_Find                    
+- Invoke-FreeIPAAPIPrivilege_Mod                     
+- Invoke-FreeIPAAPIPrivilege_Remove_Member           
+- Invoke-FreeIPAAPIPrivilege_Remove_Permission       
+- Invoke-FreeIPAAPIPrivilege_Show                    
+- Invoke-FreeIPAAPIRole_Add                          
+- Invoke-FreeIPAAPIRole_Add_Member                   
+- Invoke-FreeIPAAPIRole_Add_Privilege                
+- Invoke-FreeIPAAPIRole_Del                          
+- Invoke-FreeIPAAPIRole_Find                         
+- Invoke-FreeIPAAPIRole_Mod                          
+- Invoke-FreeIPAAPIRole_Remove_Member                
+- Invoke-FreeIPAAPIRole_Remove_Privilege             
+- Invoke-FreeIPAAPIRole_Show                         
+- Invoke-FreeIPAAPISessionLogout                     
+- Invoke-FreeIPAAPIUser_Add                          
+- Invoke-FreeIPAAPIUser_Del                          
+- Invoke-FreeIPAAPIUser_Disable                      
+- Invoke-FreeIPAAPIUser_Enable                       
+- Invoke-FreeIPAAPIUser_Find                         
+- Invoke-FreeIPAAPIUser_Mod                          
+- Invoke-FreeIPAAPIUser_Show                         
+- Invoke-FreeIPAAPIUser_Status                       
+- Invoke-FreeIPAAPIUser_Unlock                       
+- Invoke-FreeIPAHost_Find                            
+- Set-FreeIPAAPICredentials                          
+- Set-FreeIPAAPIServerConfig                         
 ### Alias
-CommandType     Name                                               Version    Source
------------     ----                                               -------    ------
-Alias           Add-IPAGroupMember                                 0.0        Manage-FreeIPA
-Alias           Add-IPAPermissionMember                            0.0        Manage-FreeIPA
-Alias           Add-IPAPermissionPrivilege                         0.0        Manage-FreeIPA
-Alias           Add-IPAPrivilegeMember                             0.0        Manage-FreeIPA
-Alias           Add-IPARoleMember                                  0.0        Manage-FreeIPA
-Alias           Add-PrivilegeRole                                  0.0        Manage-FreeIPA
-Alias           Connect-IPA                                        0.0        Manage-FreeIPA
-Alias           Disable-IPAUser                                    0.0        Manage-FreeIPA
-Alias           Disconnect-IPA                                     0.0        Manage-FreeIPA
-Alias           Enable-IPAUser                                     0.0        Manage-FreeIPA
-Alias           Find-IPAGroup                                      0.0        Manage-FreeIPA
-Alias           Find-IPAHost                                       0.0        Manage-FreeIPA
-Alias           Find-IPAPermission                                 0.0        Manage-FreeIPA
-Alias           Find-IPAPrivilege                                  0.0        Manage-FreeIPA
-Alias           Find-IPARole                                       0.0        Manage-FreeIPA
-Alias           Find-IPAUser                                       0.0        Manage-FreeIPA
-Alias           Get-IPAConfig                                      0.0        Manage-FreeIPA
-Alias           Get-IPAEnvironment                                 0.0        Manage-FreeIPA
-Alias           Get-IPAGroup                                       0.0        Manage-FreeIPA
-Alias           Get-IPAHost                                        0.0        Manage-FreeIPA
-Alias           Get-IPAPermission                                  0.0        Manage-FreeIPA
-Alias           Get-IPAPrivilege                                   0.0        Manage-FreeIPA
-Alias           Get-IPARole                                        0.0        Manage-FreeIPA
-Alias           Get-IPAUser                                        0.0        Manage-FreeIPA
-Alias           Get-IPAUserStatus                                  0.0        Manage-FreeIPA
-Alias           Import-IPACrendentials                             0.0        Manage-FreeIPA
-Alias           New-IPAGroup                                       0.0        Manage-FreeIPA
-Alias           New-IPAHost                                        0.0        Manage-FreeIPA
-Alias           New-IPANoACIPermission                             0.0        Manage-FreeIPA
-Alias           New-IPAPermission                                  0.0        Manage-FreeIPA
-Alias           New-IPAPrivilege                                   0.0        Manage-FreeIPA
-Alias           New-IPARole                                        0.0        Manage-FreeIPA
-Alias           New-IPAUser                                        0.0        Manage-FreeIPA
-Alias           Remove-IPAGroup                                    0.0        Manage-FreeIPA
-Alias           Remove-IPAGroupMember                              0.0        Manage-FreeIPA
-Alias           Remove-IPAHost                                     0.0        Manage-FreeIPA
-Alias           Remove-IPAPermission                               0.0        Manage-FreeIPA
-Alias           Remove-IPAPermissionMember                         0.0        Manage-FreeIPA
-Alias           Remove-IPAPermissionPrivilege                      0.0        Manage-FreeIPA
-Alias           Remove-IPAPrivilege                                0.0        Manage-FreeIPA
-Alias           Remove-IPAPrivilegeMember                          0.0        Manage-FreeIPA
-Alias           Remove-IPARole                                     0.0        Manage-FreeIPA
-Alias           Remove-IPARoleMember                               0.0        Manage-FreeIPA
-Alias           Remove-IPAUser                                     0.0        Manage-FreeIPA
-Alias           Remove-PrivilegeRole                               0.0        Manage-FreeIPA
-Alias           Set-IPAConfig                                      0.0        Manage-FreeIPA
-Alias           Set-IPACredentials                                 0.0        Manage-FreeIPA
-Alias           Set-IPAGroup                                       0.0        Manage-FreeIPA
-Alias           Set-IPAHost                                        0.0        Manage-FreeIPA
-Alias           Set-IPAPermission                                  0.0        Manage-FreeIPA
-Alias           Set-IPAPrivilege                                   0.0        Manage-FreeIPA
-Alias           Set-IPARole                                        0.0        Manage-FreeIPA
-Alias           Set-IPAServerConfig                                0.0        Manage-FreeIPA
-Alias           Set-IPAUser                                        0.0        Manage-FreeIPA
-Alias           Set-IPAUserPassword                                0.0        Manage-FreeIPA
-Alias           Show-IPAGroup                                      0.0        Manage-FreeIPA
-Alias           Show-IPAHost                                       0.0        Manage-FreeIPA
-Alias           Show-IPAPermission                                 0.0        Manage-FreeIPA
-Alias           Show-IPAPrivilege                                  0.0        Manage-FreeIPA
-Alias           Show-IPARole                                       0.0        Manage-FreeIPA
-Alias           Show-IPAUser                                       0.0        Manage-FreeIPA
-Alias           Unlock-IPAUser                                     0.0        Manage-FreeIPA
+- Add-IPAGroupMember                                 
+- Add-IPAPermissionMember                            
+- Add-IPAPermissionPrivilege                         
+- Add-IPAPrivilegeMember                             
+- Add-IPARoleMember                                  
+- Add-PrivilegeRole                                  
+- Connect-IPA                                        
+- Disable-IPAUser                                    
+- Disconnect-IPA                                     
+- Enable-IPAUser                                     
+- Find-IPAGroup                                      
+- Find-IPAHost                                       
+- Find-IPAPermission                                 
+- Find-IPAPrivilege                                  
+- Find-IPARole                                       
+- Find-IPAUser                                       
+- Get-IPAConfig                                      
+- Get-IPAEnvironment                                 
+- Get-IPAGroup                                       
+- Get-IPAHost                                        
+- Get-IPAPermission                                  
+- Get-IPAPrivilege                                   
+- Get-IPARole                                        
+- Get-IPAUser                                        
+- Get-IPAUserStatus                                  
+- Import-IPACrendentials                             
+- New-IPAGroup                                       
+- New-IPAHost                                        
+- New-IPANoACIPermission                             
+- New-IPAPermission                                  
+- New-IPAPrivilege                                   
+- New-IPARole                                        
+- New-IPAUser                                        
+- Remove-IPAGroup                                    
+- Remove-IPAGroupMember                              
+- Remove-IPAHost                                     
+- Remove-IPAPermission                               
+- Remove-IPAPermissionMember                         
+- Remove-IPAPermissionPrivilege                      
+- Remove-IPAPrivilege                                
+- Remove-IPAPrivilegeMember                          
+- Remove-IPARole                                     
+- Remove-IPARoleMember                               
+- Remove-IPAUser                                     
+- Remove-PrivilegeRole                               
+- Set-IPAConfig                                      
+- Set-IPACredentials                                 
+- Set-IPAGroup                                       
+- Set-IPAHost                                        
+- Set-IPAPermission                                  
+- Set-IPAPrivilege                                   
+- Set-IPARole                                        
+- Set-IPAServerConfig                                
+- Set-IPAUser                                        
+- Set-IPAUserPassword                                
+- Show-IPAGroup                                      
+- Show-IPAHost                                       
+- Show-IPAPermission                                 
+- Show-IPAPrivilege                                  
+- Show-IPARole                                       
+- Show-IPAUser                                       
+- Unlock-IPAUser                                     
 
 ## Use the module
 ### Set your config and be authenticated with your server
