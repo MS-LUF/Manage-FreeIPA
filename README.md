@@ -35,7 +35,7 @@ You can easily install it from powershell gallery repository https://www.powersh
 ```
 
 ## Exported Functions and Alias
-###Functions
+### Functions
 - Get-FreeIPAAPIAuthenticationCookie                 
 - Import-FreeIPAAPICrendentials                      
 - Invoke-FreeIPAAPI                                  
