@@ -27,7 +27,7 @@ Don't forget to trust your IPA AC / ssl certificate locally before using the Pow
 ## Documentation
 All docs are available in Mardown format under docs folder. Currently only my custom functions are fill, the other one are quite empty and will be filled soon.
 
-## Install Manage-ADShadowGroup from PowerShell Gallery repository
+## Install Manage-FreeIPA from PowerShell Gallery repository
 You can easily install it from powershell gallery repository https://www.powershellgallery.com/packages/Manage-FreeIPA/ using a simple powershell command and an internet access :-)
 ```
 	Install-Module -Name Manage-FreeIPA
