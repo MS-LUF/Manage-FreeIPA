@@ -17,7 +17,7 @@ Invoke-FreeIPAAPImigrate_ds [[-bind_dn] <String>] [[-user_container] <String>] [
  [[-user_ignore_attribute] <String[]>] [[-group_ignore_objectclass] <String[]>]
  [[-group_ignore_attribute] <String[]>] [-group_overwrite_gid] [[-schema] <String>] [-continue]
  [[-base_dn] <String>] [-with_compat] [[-ca_cert_file] <String>] [-use_default_group] [[-scope] <String>]
- [[-version] <String>] [[-exclude_groups] <String[]>] [[-exclude_users] <String[]>] [-ldap_uri] <String>
+ [[-version] <String>] [[-exclude_users] <String[]>] [[-exclude_groups] <String[]>] [-ldap_uri] <String>
  [-password] <SecureString> [-FullResultsOutput] [<CommonParameters>]
 ```
 
@@ -310,8 +310,8 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -exclude_groups
-groups to exclude from migration
+### -exclude_users
+users to exclude from migration
 
 ```yaml
 Type: String[]
@@ -325,8 +325,8 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -exclude_users
-users to exclude from migration
+### -exclude_groups
+groups to exclude from migration
 
 ```yaml
 Type: String[]
@@ -371,7 +371,7 @@ Accept wildcard characters: False
 ```
 
 ### -FullResultsOutput
-{{Fill FullResultsOutput Description}}
+{{ Fill FullResultsOutput Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -386,8 +386,7 @@ Accept wildcard characters: False
 ```
 
 ### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.
-For more information, see about_CommonParameters (http://go.microsoft.com/fwlink/?LinkID=113216).
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS
 

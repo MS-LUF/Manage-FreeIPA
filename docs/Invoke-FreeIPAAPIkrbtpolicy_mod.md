@@ -12,9 +12,11 @@ schema: 2.0.0
 ## SYNTAX
 
 ```
-Invoke-FreeIPAAPIkrbtpolicy_mod [[-maxlife] <Int32>] [[-maxrenew] <Int32>] [[-setattr] <String[]>]
- [[-addattr] <String[]>] [[-delattr] <String[]>] [-rights] [-all] [-raw] [[-version] <String>]
- [[-user] <String>] [-FullResultsOutput] [<CommonParameters>]
+Invoke-FreeIPAAPIkrbtpolicy_mod [[-maxlife] <Int32>] [[-maxrenew] <Int32>] [[-otp_maxlife] <Int32>]
+ [[-otp_maxrenew] <Int32>] [[-radius_maxlife] <Int32>] [[-radius_maxrenew] <Int32>] [[-pkinit_maxlife] <Int32>]
+ [[-pkinit_maxrenew] <Int32>] [[-hardened_maxlife] <Int32>] [[-hardened_maxrenew] <Int32>]
+ [[-setattr] <String[]>] [[-addattr] <String[]>] [[-delattr] <String[]>] [-rights] [-all] [-raw]
+ [[-version] <String>] [[-user] <String>] [-FullResultsOutput] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -61,6 +63,126 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -otp_maxlife
+OTP token maximum ticket life (seconds)
+
+```yaml
+Type: Int32
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 3
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -otp_maxrenew
+OTP token ticket maximum renewable age (seconds)
+
+```yaml
+Type: Int32
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 4
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -radius_maxlife
+RADIUS maximum ticket life (seconds)
+
+```yaml
+Type: Int32
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 5
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -radius_maxrenew
+RADIUS ticket maximum renewable age (seconds)
+
+```yaml
+Type: Int32
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 6
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -pkinit_maxlife
+PKINIT maximum ticket life (seconds)
+
+```yaml
+Type: Int32
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 7
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -pkinit_maxrenew
+PKINIT ticket maximum renewable age (seconds)
+
+```yaml
+Type: Int32
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 8
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -hardened_maxlife
+Hardened ticket maximum ticket life (seconds)
+
+```yaml
+Type: Int32
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 9
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -hardened_maxrenew
+Hardened ticket maximum renewable age (seconds)
+
+```yaml
+Type: Int32
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 10
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -setattr
 Set an attribute to a name/value pair.
 Format is attr=value.
@@ -72,7 +194,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 3
+Position: 11
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -90,7 +212,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 4
+Position: 12
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -107,7 +229,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 5
+Position: 13
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -171,7 +293,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 6
+Position: 14
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -186,14 +308,14 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 7
+Position: 15
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
 ### -FullResultsOutput
-{{Fill FullResultsOutput Description}}
+{{ Fill FullResultsOutput Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -208,8 +330,7 @@ Accept wildcard characters: False
 ```
 
 ### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.
-For more information, see about_CommonParameters (http://go.microsoft.com/fwlink/?LinkID=113216).
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS
 

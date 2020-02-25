@@ -12,7 +12,7 @@ schema: 2.0.0
 ## SYNTAX
 
 ```
-Invoke-FreeIPAAPIradiusproxy_find [[-name] <String>] [[-desc] <String>] [[-server] <String[]>]
+Invoke-FreeIPAAPIradiusproxy_find [[-name] <String>] [[-desc] <String>] [[-server] <String>]
  [[-secret] <SecureString>] [[-timeout] <Int32>] [[-retries] <Int32>] [[-userattr] <String>]
  [[-timelimit] <Int32>] [[-sizelimit] <Int32>] [-all] [-raw] [[-version] <String>] [-pkey_only]
  [[-criteria] <String>] [-FullResultsOutput] [<CommonParameters>]
@@ -66,7 +66,7 @@ Accept wildcard characters: False
 The hostname or IP (with or without port)
 
 ```yaml
-Type: String[]
+Type: String
 Parameter Sets: (All)
 Aliases:
 
@@ -246,7 +246,7 @@ Accept wildcard characters: False
 ```
 
 ### -FullResultsOutput
-{{Fill FullResultsOutput Description}}
+{{ Fill FullResultsOutput Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -261,8 +261,7 @@ Accept wildcard characters: False
 ```
 
 ### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.
-For more information, see about_CommonParameters (http://go.microsoft.com/fwlink/?LinkID=113216).
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS
 
