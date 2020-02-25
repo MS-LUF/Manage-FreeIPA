@@ -15,10 +15,13 @@ schema: 2.0.0
 Invoke-FreeIPAAPIgroup_find [[-group_name] <String>] [[-desc] <String>] [[-gid] <Int32>] [[-timelimit] <Int32>]
  [[-sizelimit] <Int32>] [-private] [-posix] [-external] [-nonposix] [-all] [-raw] [[-version] <String>]
  [-no_members] [-pkey_only] [[-users] <String[]>] [[-no_users] <String[]>] [[-groups] <String[]>]
- [[-no_groups] <String[]>] [[-in_groups] <String[]>] [[-not_in_groups] <String[]>] [[-in_netgroups] <String[]>]
- [[-not_in_netgroups] <String[]>] [[-in_roles] <String[]>] [[-not_in_roles] <String[]>]
- [[-in_hbacrules] <String[]>] [[-not_in_hbacrules] <String[]>] [[-in_sudorules] <String[]>]
- [[-not_in_sudorules] <String[]>] [[-criteria] <String>] [-FullResultsOutput] [<CommonParameters>]
+ [[-no_groups] <String[]>] [[-services] <String[]>] [[-no_services] <String[]>] [[-in_groups] <String[]>]
+ [[-not_in_groups] <String[]>] [[-in_netgroups] <String[]>] [[-not_in_netgroups] <String[]>]
+ [[-in_roles] <String[]>] [[-not_in_roles] <String[]>] [[-in_hbacrules] <String[]>]
+ [[-not_in_hbacrules] <String[]>] [[-in_sudorules] <String[]>] [[-not_in_sudorules] <String[]>]
+ [[-membermanager_users] <String[]>] [[-not_membermanager_users] <String[]>]
+ [[-membermanager_groups] <String[]>] [[-not_membermanager_groups] <String[]>] [[-criteria] <String>]
+ [-FullResultsOutput] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -308,6 +311,36 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -services
+Search for groups with these member services.
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 11
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -no_services
+Search for groups without these member services.
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 12
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -in_groups
 Search for groups with these member of groups.
 
@@ -317,7 +350,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 11
+Position: 13
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -332,7 +365,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 12
+Position: 14
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -347,7 +380,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 13
+Position: 15
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -362,7 +395,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 14
+Position: 16
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -377,7 +410,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 15
+Position: 17
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -392,7 +425,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 16
+Position: 18
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -407,7 +440,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 17
+Position: 19
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -422,7 +455,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 18
+Position: 20
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -437,7 +470,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 19
+Position: 21
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -452,7 +485,67 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 20
+Position: 22
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -membermanager_users
+Search for groups with these group membership managed by users.
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 23
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -not_membermanager_users
+Search for groups without these group membership managed by users.
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 24
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -membermanager_groups
+Search for groups with these group membership managed by groups.
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 25
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -not_membermanager_groups
+Search for groups without these group membership managed by groups.
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 26
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -467,14 +560,14 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 21
+Position: 27
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
 ### -FullResultsOutput
-{{Fill FullResultsOutput Description}}
+{{ Fill FullResultsOutput Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -489,8 +582,7 @@ Accept wildcard characters: False
 ```
 
 ### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.
-For more information, see about_CommonParameters (http://go.microsoft.com/fwlink/?LinkID=113216).
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS
 

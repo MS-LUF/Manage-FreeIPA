@@ -13,7 +13,8 @@ schema: 2.0.0
 
 ```
 Invoke-FreeIPAAPIgroup_add_member [[-external] <String[]>] [-all] [-raw] [[-version] <String>] [-no_members]
- [[-users] <String[]>] [[-groups] <String[]>] [-group_name] <String> [-FullResultsOutput] [<CommonParameters>]
+ [[-users] <String[]>] [[-groups] <String[]>] [[-services] <String[]>] [-group_name] <String>
+ [-FullResultsOutput] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -138,6 +139,21 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -services
+services to add
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 5
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -group_name
 Group name
 
@@ -147,14 +163,14 @@ Parameter Sets: (All)
 Aliases:
 
 Required: True
-Position: 5
+Position: 6
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
 ### -FullResultsOutput
-{{Fill FullResultsOutput Description}}
+{{ Fill FullResultsOutput Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -169,8 +185,7 @@ Accept wildcard characters: False
 ```
 
 ### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.
-For more information, see about_CommonParameters (http://go.microsoft.com/fwlink/?LinkID=113216).
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS
 

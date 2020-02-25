@@ -5,19 +5,20 @@ online version:
 schema: 2.0.0
 ---
 
-# Invoke-FreeIPAAPIhbacsvcgroup_add
+# Invoke-FreeIPAAPIhostgroup_remove_member_manager
 
 ## SYNOPSIS
 
 ## SYNTAX
 
 ```
-Invoke-FreeIPAAPIhbacsvcgroup_add [[-desc] <String>] [[-setattr] <String[]>] [[-addattr] <String[]>] [-all]
- [-raw] [[-version] <String>] [-no_members] [-name] <String> [-FullResultsOutput] [<CommonParameters>]
+Invoke-FreeIPAAPIhostgroup_remove_member_manager [-all] [-raw] [[-version] <String>] [-no_members]
+ [[-users] <String[]>] [[-groups] <String[]>] [-hostgroup_name] <String> [-FullResultsOutput]
+ [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Add a new HBAC service group.
+Remove users that can manage members of this hostgroup.
 
 ## EXAMPLES
 
@@ -29,56 +30,6 @@ PS C:\> {{ Add example code here }}
 {{ Add example description here }}
 
 ## PARAMETERS
-
-### -desc
-HBAC service group description
-
-```yaml
-Type: String
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 1
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -setattr
-Set an attribute to a name/value pair.
-Format is attr=value.
-For multi-valued attributes, the command replaces the values already present.
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 2
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -addattr
-Add an attribute/value pair.
-Format is attr=value.
-The attribute
-must be part of the schema.
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 3
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
 
 ### -all
 Retrieve and print all attributes from the server.
@@ -122,7 +73,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 4
+Position: 1
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -143,8 +94,38 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -name
-Service group name
+### -users
+users to remove
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 2
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -groups
+groups to remove
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 3
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -hostgroup_name
+Name of host-group
 
 ```yaml
 Type: String
@@ -152,7 +133,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: True
-Position: 5
+Position: 4
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False

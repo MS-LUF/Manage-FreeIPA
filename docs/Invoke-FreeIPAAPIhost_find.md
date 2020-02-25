@@ -13,16 +13,15 @@ schema: 2.0.0
 
 ```
 Invoke-FreeIPAAPIhost_find [[-hostname] <String>] [[-desc] <String>] [[-locality] <String>]
- [[-location] <String>] [[-platform] <String>] [[-os] <String>] [[-password] <SecureString>]
- [[-certificate] <String[]>] [[-macaddress] <String[]>] [[-class] <String[]>] [[-ipaassignedidview] <String>]
- [[-auth_ind] <String[]>] [[-timelimit] <Int32>] [[-sizelimit] <Int32>] [-all] [-raw] [[-version] <String>]
- [-no_members] [-pkey_only] [[-in_hostgroups] <String[]>] [[-not_in_hostgroups] <String[]>]
- [[-in_netgroups] <String[]>] [[-not_in_netgroups] <String[]>] [[-in_roles] <String[]>]
- [[-not_in_roles] <String[]>] [[-in_hbacrules] <String[]>] [[-not_in_hbacrules] <String[]>]
- [[-in_sudorules] <String[]>] [[-not_in_sudorules] <String[]>] [[-enroll_by_users] <String[]>]
- [[-not_enroll_by_users] <String[]>] [[-man_by_hosts] <String[]>] [[-not_man_by_hosts] <String[]>]
- [[-man_hosts] <String[]>] [[-not_man_hosts] <String[]>] [[-criteria] <String>] [-FullResultsOutput]
- [<CommonParameters>]
+ [[-location] <String>] [[-platform] <String>] [[-os] <String>] [[-certificate] <String[]>]
+ [[-macaddress] <String[]>] [[-class] <String[]>] [[-ipaassignedidview] <String>] [[-auth_ind] <String[]>]
+ [[-timelimit] <Int32>] [[-sizelimit] <Int32>] [-all] [-raw] [[-version] <String>] [-no_members] [-pkey_only]
+ [[-in_hostgroups] <String[]>] [[-not_in_hostgroups] <String[]>] [[-in_netgroups] <String[]>]
+ [[-not_in_netgroups] <String[]>] [[-in_roles] <String[]>] [[-not_in_roles] <String[]>]
+ [[-in_hbacrules] <String[]>] [[-not_in_hbacrules] <String[]>] [[-in_sudorules] <String[]>]
+ [[-not_in_sudorules] <String[]>] [[-enroll_by_users] <String[]>] [[-not_enroll_by_users] <String[]>]
+ [[-man_by_hosts] <String[]>] [[-not_man_by_hosts] <String[]>] [[-man_hosts] <String[]>]
+ [[-not_man_hosts] <String[]>] [[-criteria] <String>] [-FullResultsOutput] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -133,21 +132,6 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -password
-Password used in bulk enrollment
-
-```yaml
-Type: SecureString
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 7
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
 ### -certificate
 Base-64 encoded host certificate
 
@@ -157,7 +141,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 8
+Position: 7
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -172,7 +156,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 9
+Position: 8
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -187,7 +171,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 10
+Position: 9
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -202,7 +186,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 11
+Position: 10
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -212,7 +196,9 @@ Accept wildcard characters: False
 Defines a whitelist for Authentication Indicators.
 Use 'otp' to allow OTP-based 2FA authentications.
 Use 'radius' to allow RADIUS-based 2FA authentications.
-Other values may be used for custom configurations.
+Use 'pkinit' to allow PKINIT-based 2FA authentications.
+Use 'hardened' to allow brute-force hardened password authentication by SPAKE or FAST.
+With no indicator specified, all authentication mechanisms are allowed.
 
 ```yaml
 Type: String[]
@@ -220,7 +206,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 12
+Position: 11
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -235,7 +221,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 13
+Position: 12
 Default value: 0
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -250,7 +236,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 14
+Position: 13
 Default value: 0
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -298,7 +284,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 15
+Position: 14
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -343,7 +329,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 16
+Position: 15
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -358,7 +344,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 17
+Position: 16
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -373,7 +359,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 18
+Position: 17
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -388,7 +374,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 19
+Position: 18
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -403,7 +389,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 20
+Position: 19
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -418,7 +404,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 21
+Position: 20
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -433,7 +419,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 22
+Position: 21
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -448,7 +434,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 23
+Position: 22
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -463,7 +449,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 24
+Position: 23
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -478,7 +464,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 25
+Position: 24
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -493,7 +479,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 26
+Position: 25
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -508,7 +494,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 27
+Position: 26
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -523,7 +509,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 28
+Position: 27
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -538,7 +524,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 29
+Position: 28
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -553,7 +539,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 30
+Position: 29
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -568,7 +554,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 31
+Position: 30
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -583,14 +569,14 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 32
+Position: 31
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
 ### -FullResultsOutput
-{{Fill FullResultsOutput Description}}
+{{ Fill FullResultsOutput Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -605,8 +591,7 @@ Accept wildcard characters: False
 ```
 
 ### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.
-For more information, see about_CommonParameters (http://go.microsoft.com/fwlink/?LinkID=113216).
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS
 

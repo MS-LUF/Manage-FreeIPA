@@ -17,8 +17,9 @@ Invoke-FreeIPAAPIhostgroup_find [[-hostgroup_name] <String>] [[-desc] <String>] 
  [[-no_hosts] <String[]>] [[-hostgroups] <String[]>] [[-no_hostgroups] <String[]>]
  [[-in_hostgroups] <String[]>] [[-not_in_hostgroups] <String[]>] [[-in_netgroups] <String[]>]
  [[-not_in_netgroups] <String[]>] [[-in_hbacrules] <String[]>] [[-not_in_hbacrules] <String[]>]
- [[-in_sudorules] <String[]>] [[-not_in_sudorules] <String[]>] [[-criteria] <String>] [-FullResultsOutput]
- [<CommonParameters>]
+ [[-in_sudorules] <String[]>] [[-not_in_sudorules] <String[]>] [[-membermanager_users] <String[]>]
+ [[-not_membermanager_users] <String[]>] [[-membermanager_groups] <String[]>]
+ [[-not_membermanager_groups] <String[]>] [[-criteria] <String>] [-FullResultsOutput] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -353,11 +354,11 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -criteria
-A string searched in all relevant object attributes
+### -membermanager_users
+Search for host groups with these group membership managed by users.
 
 ```yaml
-Type: String
+Type: String[]
 Parameter Sets: (All)
 Aliases:
 
@@ -368,8 +369,68 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -not_membermanager_users
+Search for host groups without these group membership managed by users.
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 19
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -membermanager_groups
+Search for host groups with these group membership managed by groups.
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 20
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -not_membermanager_groups
+Search for host groups without these group membership managed by groups.
+
+```yaml
+Type: String[]
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 21
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -criteria
+A string searched in all relevant object attributes
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 22
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -FullResultsOutput
-{{Fill FullResultsOutput Description}}
+{{ Fill FullResultsOutput Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -384,8 +445,7 @@ Accept wildcard characters: False
 ```
 
 ### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.
-For more information, see about_CommonParameters (http://go.microsoft.com/fwlink/?LinkID=113216).
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS
 
