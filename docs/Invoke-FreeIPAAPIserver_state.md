@@ -5,19 +5,19 @@ online version:
 schema: 2.0.0
 ---
 
-# Invoke-FreeIPAAPIselfservice_del
+# Invoke-FreeIPAAPIserver_state
 
 ## SYNOPSIS
 
 ## SYNTAX
 
 ```
-Invoke-FreeIPAAPIselfservice_del [[-version] <String>] [-name] <String> [-FullResultsOutput]
+Invoke-FreeIPAAPIserver_state [-state] <String> [[-version] <String>] [-name] <String> [-FullResultsOutput]
  [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Delete a self-service permission.
+Set enabled/hidden state of a server.
 
 ## EXAMPLES
 
@@ -30,6 +30,21 @@ PS C:\> {{ Add example code here }}
 
 ## PARAMETERS
 
+### -state
+Server state
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: True
+Position: 1
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -version
 Client version.
 Used to determine if server will accept request.
@@ -40,14 +55,14 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 1
+Position: 2
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
 ### -name
-Self-service name
+IPA server hostname
 
 ```yaml
 Type: String
@@ -55,7 +70,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: True
-Position: 2
+Position: 3
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False

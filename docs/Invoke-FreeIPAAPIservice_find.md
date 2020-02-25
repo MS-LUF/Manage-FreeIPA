@@ -83,7 +83,9 @@ Accept wildcard characters: False
 Defines a whitelist for Authentication Indicators.
 Use 'otp' to allow OTP-based 2FA authentications.
 Use 'radius' to allow RADIUS-based 2FA authentications.
-Other values may be used for custom configurations.
+Use 'pkinit' to allow PKINIT-based 2FA authentications.
+Use 'hardened' to allow brute-force hardened password authentication by SPAKE or FAST.
+With no indicator specified, all authentication mechanisms are allowed.
 
 ```yaml
 Type: String[]
@@ -251,7 +253,7 @@ Accept wildcard characters: False
 ```
 
 ### -FullResultsOutput
-{{Fill FullResultsOutput Description}}
+{{ Fill FullResultsOutput Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -266,8 +268,7 @@ Accept wildcard characters: False
 ```
 
 ### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.
-For more information, see about_CommonParameters (http://go.microsoft.com/fwlink/?LinkID=113216).
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS
 

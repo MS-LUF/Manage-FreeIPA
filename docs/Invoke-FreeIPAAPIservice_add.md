@@ -14,7 +14,7 @@ schema: 2.0.0
 ```
 Invoke-FreeIPAAPIservice_add [[-certificate] <String[]>] [[-pac_type] <String[]>] [[-auth_ind] <String[]>]
  [-requires_pre_auth] [-ok_as_delegate] [-ok_to_auth_as_delegate] [[-setattr] <String[]>]
- [[-addattr] <String[]>] [-force] [-all] [-raw] [[-version] <String>] [-no_members]
+ [[-addattr] <String[]>] [-force] [-skip_host_check] [-all] [-raw] [[-version] <String>] [-no_members]
  [-canonical_principal] <String> [-FullResultsOutput] [<CommonParameters>]
 ```
 
@@ -68,7 +68,9 @@ Accept wildcard characters: False
 Defines a whitelist for Authentication Indicators.
 Use 'otp' to allow OTP-based 2FA authentications.
 Use 'radius' to allow RADIUS-based 2FA authentications.
-Other values may be used for custom configurations.
+Use 'pkinit' to allow PKINIT-based 2FA authentications.
+Use 'hardened' to allow brute-force hardened password authentication by SPAKE or FAST.
+With no indicator specified, all authentication mechanisms are allowed.
 
 ```yaml
 Type: String[]
@@ -163,7 +165,22 @@ Accept wildcard characters: False
 ```
 
 ### -force
-force principal name even if not in DNS
+force principal name even if host not in DNS
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -skip_host_check
+force service to be created even when host object does not exist to manage it
 
 ```yaml
 Type: SwitchParameter
@@ -256,7 +273,7 @@ Accept wildcard characters: False
 ```
 
 ### -FullResultsOutput
-{{Fill FullResultsOutput Description}}
+{{ Fill FullResultsOutput Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -271,8 +288,7 @@ Accept wildcard characters: False
 ```
 
 ### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.
-For more information, see about_CommonParameters (http://go.microsoft.com/fwlink/?LinkID=113216).
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS
 

@@ -21,9 +21,10 @@ Invoke-FreeIPAAPIstageuser_mod [[-first] <String>] [[-last] <String>] [[-cn] <St
  [[-manager] <String>] [[-carlicense] <String[]>] [[-sshpubkey] <String[]>] [[-user_auth_type] <String[]>]
  [[-class] <String[]>] [[-radius] <String>] [[-radius_username] <String>] [[-departmentnumber] <String[]>]
  [[-employeenumber] <String>] [[-employeetype] <String>] [[-preferredlanguage] <String>]
- [[-certificate] <String[]>] [[-setattr] <String[]>] [[-addattr] <String[]>] [[-delattr] <String[]>] [-rights]
- [-all] [-raw] [[-version] <String>] [-no_members] [[-rename] <String>] [-login] <String> [-FullResultsOutput]
- [<CommonParameters>]
+ [[-certificate] <String[]>] [[-smb_logon_script] <String>] [[-smb_profile_path] <String>]
+ [[-smb_home_dir] <String>] [[-smb_home_drive] <String>] [[-setattr] <String[]>] [[-addattr] <String[]>]
+ [[-delattr] <String[]>] [-rights] [-all] [-raw] [[-version] <String>] [-no_members] [[-rename] <String>]
+ [-login] <String> [-FullResultsOutput] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -611,6 +612,66 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -smb_logon_script
+SMB logon script path
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 38
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -smb_profile_path
+SMB profile path
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 39
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -smb_home_dir
+SMB Home Directory
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 40
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -smb_home_drive
+SMB Home Directory Drive
+
+```yaml
+Type: String
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 41
+Default value: None
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -setattr
 Set an attribute to a name/value pair.
 Format is attr=value.
@@ -622,7 +683,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 38
+Position: 42
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -640,7 +701,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 39
+Position: 43
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -657,7 +718,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 40
+Position: 44
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -721,7 +782,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 41
+Position: 45
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -751,7 +812,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 42
+Position: 46
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -766,14 +827,14 @@ Parameter Sets: (All)
 Aliases:
 
 Required: True
-Position: 43
+Position: 47
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
 ### -FullResultsOutput
-{{Fill FullResultsOutput Description}}
+{{ Fill FullResultsOutput Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -788,8 +849,7 @@ Accept wildcard characters: False
 ```
 
 ### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.
-For more information, see about_CommonParameters (http://go.microsoft.com/fwlink/?LinkID=113216).
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS
 

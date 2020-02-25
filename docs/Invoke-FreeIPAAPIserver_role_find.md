@@ -13,8 +13,8 @@ schema: 2.0.0
 
 ```
 Invoke-FreeIPAAPIserver_role_find [[-server] <String>] [[-role] <String>] [[-status] <String>]
- [[-timelimit] <Int32>] [[-sizelimit] <Int32>] [-all] [-raw] [[-version] <String>] [[-criteria] <String>]
- [-FullResultsOutput] [<CommonParameters>]
+ [[-timelimit] <Int32>] [[-sizelimit] <Int32>] [-include_master] [-all] [-raw] [[-version] <String>]
+ [[-criteria] <String>] [-FullResultsOutput] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
@@ -106,6 +106,21 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -include_master
+Include IPA master entries
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -all
 Retrieve and print all attributes from the server.
 Affects command output.
@@ -170,7 +185,7 @@ Accept wildcard characters: False
 ```
 
 ### -FullResultsOutput
-{{Fill FullResultsOutput Description}}
+{{ Fill FullResultsOutput Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -185,8 +200,7 @@ Accept wildcard characters: False
 ```
 
 ### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.
-For more information, see about_CommonParameters (http://go.microsoft.com/fwlink/?LinkID=113216).
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS
 
