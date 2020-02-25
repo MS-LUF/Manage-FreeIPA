@@ -1,12 +1,12 @@
 #
 # Created by: lucas.cueff[at]lucas-cueff.com
-# Build by : Lucas Cueff
-# v0.8 : 
-# - First Release automatically generated with Build-FreeIPAModule PowerShell module
+# Build by : lucas.cueff@lucas-cueff.com - automatically build from IPA demo server (https://ipa.demo1.freeipa.org) with Build-FreeIPAModule
+# v0.9 : 
+# - Add multi config file as requested by baldator + Fix securestring issue reported by nadinezan + add proxy management to connect to IPA + simplify error management in catch
 #
-# Released on: 18/11/2018
+# Released on: 24/02/2020
 #
-#'(c) 2018 lucas-cueff.com - Distributed under Artistic Licence 2.0 (https://opensource.org/licenses/artistic-license-2.0).'
+#'(c) 2018-2020 lucas-cueff.com - Distributed under Artistic Licence 2.0 (https://opensource.org/licenses/artistic-license-2.0).'
 
 <#
 	.SYNOPSIS 
@@ -39,6 +39,9 @@ Function Set-FreeIPAAPICredentials {
           [switch]$EncryptKeyInLocalFile,
       [parameter(Mandatory=$false)]
       [ValidateNotNullOrEmpty()]
+          [string]$ConfigName,
+      [parameter(Mandatory=$false)]
+      [ValidateNotNullOrEmpty()]
           [securestring]$MasterPassword
     )
     if ($Remove.IsPresent) {
@@ -67,33 +70,50 @@ Function Set-FreeIPAAPICredentials {
                   EncryptedAdminAccount = $EncryptedLogin
               }
               $FolderName = 'Manage-FreeIPA'
-              $ConfigName = 'Manage-FreeIPA.xml'
-              if (!(Test-Path -Path "$($env:AppData)\$FolderName")) {
-                  New-Item -ItemType directory -Path "$($env:AppData)\$FolderName" | Out-Null
+              if ($ConfigName) {
+                  $ConfigName = "Manage-FreeIPA-$($ConfigName).xml"
+              } else {
+                  $ConfigName = 'Manage-FreeIPA.xml'
               }
-              if (test-path "$($env:AppData)\$FolderName\$ConfigName") {
-                  Remove-item -Path "$($env:AppData)\$FolderName\$ConfigName" -Force | out-null
+              if (!$home -and $env:userprofile) {
+				  $global:home = $env:userprofile
+			  }
+              if (!(Test-Path -Path "$($global:home)\$FolderName")) {
+                  New-Item -ItemType directory -Path "$($global:home)\$FolderName" | Out-Null
               }
-              $ObjConfigFreeIPA | Export-Clixml "$($env:AppData)\$FolderName\$ConfigName"
-          }	
+              if (test-path "$($global:home)\$FolderName\$ConfigName") {
+                  Remove-item -Path "$($global:home)\$FolderName\$ConfigName" -Force | out-null
+              }
+              $ObjConfigFreeIPA | Export-Clixml "$($global:home)\$FolderName\$ConfigName"
+          }
       }
     }
   }
 Function Import-FreeIPAAPICrendentials {
       [CmdletBinding()]
       Param(
-          [Parameter(Mandatory=$true,ValueFromPipelineByPropertyName=$true)]
+          [parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
           [ValidateNotNullOrEmpty()]
-          [securestring]$MasterPassword
+            [string]$ConfigName,
+          [Parameter(Mandatory=$true)]
+          [ValidateNotNullOrEmpty()]
+            [securestring]$MasterPassword
       )
       process {
-        $FolderName = 'Manage-FreeIPA'
-        $ConfigName = 'Manage-FreeIPA.xml'
-          if (!(Test-Path "$($env:AppData)\$($FolderName)\$($ConfigName)")){
+          $FolderName = 'Manage-FreeIPA'
+          if ($ConfigName) {
+            $ConfigName = "Manage-FreeIPA-$($ConfigName).xml"
+          } else {
+            $ConfigName = 'Manage-FreeIPA.xml'
+          }
+          if (!$home -and $env:userprofile) {
+            $global:home = $env:userprofile
+          }
+          if (!(Test-Path "$($global:home)\$($FolderName)\$($ConfigName)")){
               Write-warning 'Configuration file has not been set, Set-FreeIPAAPICredentials to configure the credentials.'
               throw 'error config file not found'
           }
-          $ObjConfigFreeIPA = Import-Clixml "$($env:AppData)\$($FolderName)\$($ConfigName)"
+          $ObjConfigFreeIPA = Import-Clixml "$($global:home)\$($FolderName)\$($ConfigName)"
           $Credentials = New-Object System.Management.Automation.PSCredential -ArgumentList 'user', $MasterPassword
           try {
               $Rfc2898Deriver = New-Object System.Security.Cryptography.Rfc2898DeriveBytes -ArgumentList $Credentials.GetNetworkCredential().Password, $ObjConfigFreeIPA.Salt
@@ -114,7 +134,7 @@ Function Import-FreeIPAAPICrendentials {
 Function Set-FreeIPAAPIServerConfig {
     [CmdletBinding()]
     Param(
-        [Parameter(Mandatory=$true,ValueFromPipelineByPropertyName=$true)]
+        [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
         [ValidateScript({$_ -match "(http[s]?)(:\/\/)([^\s,]+)"})]
             [String]$URL,
         [parameter(Mandatory=$false)]
@@ -122,13 +142,19 @@ Function Set-FreeIPAAPIServerConfig {
             [String]$ClientVersion
     )
     process {
-        $global:FreeIPAAPIServerConfig = @{
-            ServerURL = $URL
+        if ($URL) {
+            $global:FreeIPAAPIServerConfig = @{
+                ServerURL = $URL
+            }
+        } else {
+            $global:FreeIPAAPIServerConfig = @{
+                ServerURL = "https://ipa.demo1.freeipa.org"
+            }
         }
         if ($ClientVersion) {
             $global:FreeIPAAPIServerConfig.add('ClientVersion',$ClientVersion)
         } else {
-            $global:FreeIPAAPIServerConfig.add('ClientVersion',"2.229")
+            $global:FreeIPAAPIServerConfig.add('ClientVersion',"2.235")
         }
     }
   }
@@ -171,22 +197,26 @@ Function Get-FreeIPAAPIAuthenticationCookie {
             $BSTRCredentials = @{
                 user = [Runtime.InteropServices.Marshal]::PtrToStringAuto($SecureStringLoginToBSTR)
                 password = [Runtime.InteropServices.Marshal]::PtrToStringAuto($SecureStringPassToBSTR) 
-            }
-            $FreeIPALogin = Invoke-WebRequest "$($global:FreeIPAAPIServerConfig.ServerURL)/ipa/session/login_password" -Session 'FunctionFreeIPASession' -Body $BSTRCredentials -Method 'POST'
-        } catch [System.Net.Http.HttpRequestException] {
-            switch ($_.Exception.Response.StatusCode.value__) {
-                404 { 
-                        Write-error -message "Please check that /ipa/session/login_password is available on your FreeIPA server"
-                    }
-                Default {
-                            write-error -message "HTTP Error Code $($_.Exception.Response.StatusCode.Value__) with error message:$($_.Exception.Response.StatusDescription)"
-                        }
-            }
-            Break
-        } catch [System.Exception] {
-            write-error -message "other error encountered - error message:$($_.Exception.message)"
-            break
-        }
+            }            
+            if ($global:FreeIPAProxyParams) {
+			  $params = $global:FreeIPAProxyParams.clone()
+			  if (!$params.UseBasicParsing){$params.add('UseBasicParsing', $true)}
+		    } Else {
+			  $params = @{}
+			  $params.add('UseBasicParsing', $true)
+		    }
+            $params.add('URI', "$($global:FreeIPAAPIServerConfig.ServerURL)/ipa/session/login_password")
+            $params.add('Session', 'FunctionFreeIPASession')
+            $params.add('Body',$BSTRCredentials)
+            $params.add('Method','POST')
+            $FreeIPALogin = Invoke-WebRequest @params
+        } catch {
+            write-verbose -message "Error Type: $($_.Exception.GetType().FullName)"
+			write-verbose -message "Error Message: $($_.Exception.Message)"
+			write-verbose -message "HTTP error code:$($_.Exception.Response.StatusCode.Value__)"
+			write-verbose -message "HTTP error message:$($_.Exception.Response.StatusDescription)"
+            $PSCmdlet.ThrowTerminatingError($PSitem)
+        } 
         $global:FreeIPASession = $FunctionFreeIPASession
         $FreeIPALogin
     }
@@ -209,34 +239,116 @@ Function Invoke-FreeIPAAPI {
             Write-Verbose -message $json
         } catch {
             write-error -message "Not able to convert input object to json"
-            break
         }
         try {
             if ($json) {
-                Invoke-RestMethod "$($global:FreeIPAAPIServerConfig.ServerURL)/ipa/session/json" -Method Post -WebSession $global:FreeIPASession -Body $json -ContentType 'application/json' -Headers @{"Referer"="$($global:FreeIPAAPIServerConfig.ServerURL)/ipa/session/json"}
+              if ($global:FreeIPAProxyParams) {
+			  $params = $global:FreeIPAProxyParams.clone()
+			  if (!$params.UseBasicParsing){$params.add('UseBasicParsing', $true)}
+		      } Else {
+			    $params = @{}
+			    $params.add('UseBasicParsing', $true)
+		      }
+              $params.add('URI', "$($global:FreeIPAAPIServerConfig.ServerURL)/ipa/session/json")
+              $params.add('WebSession', $global:FreeIPASession)
+              $params.add('Body',$json)
+              $params.add('Method','POST')
+              $params.add('ContentType','application/json')
+              $params.add('Headers',@{"Referer"="$($global:FreeIPAAPIServerConfig.ServerURL)/ipa/session/json"})
+                Invoke-RestMethod @params
             }            
-        } catch [System.Net.Http.HttpRequestException] {
-            switch ($_.Exception.Response.StatusCode.value__) {
-                404 { 
-                        Write-error -message "Please check that /ipa/session/json is available on your FreeIPA server"
-                    }
-                Default {
-                            write-error -message "HTTP Error Code $($_.Exception.Response.StatusCode.Value__) with error message:$($_.Exception.Response.StatusDescription)"
-                        }
-            }
-            Break
         } catch {
-            write-error -message "error - please troubleshoot - error message:$($_.Exception.message)"
-            break
+            write-verbose -message "Error Type: $($_.Exception.GetType().FullName)"
+			write-verbose -message "Error Message: $($_.Exception.Message)"
+			write-verbose -message "HTTP error code:$($_.Exception.Response.StatusCode.Value__)"
+			write-verbose -message "HTTP error message:$($_.Exception.Response.StatusDescription)"
+            $PSCmdlet.ThrowTerminatingError($PSitem)
         }
     }
+}
+Function Set-FreeIPAProxy {
+	<#
+	  .SYNOPSIS 
+	  Set an internet proxy to use FreeIPA web api
+  
+	  .DESCRIPTION
+	  Set an internet proxy to use FreeIPA web api
+
+	  .PARAMETER DirectNoProxy
+	  -DirectNoProxy
+	  Remove proxy and configure FreeIPA powershell functions to use a direct connection
+	
+	  .PARAMETER Proxy
+	  -Proxy{Proxy}
+	  Set the proxy URL
+
+	  .PARAMETER ProxyCredential
+	  -ProxyCredential{ProxyCredential}
+	  Set the proxy credential to be authenticated with the internet proxy set
+
+	  .PARAMETER ProxyUseDefaultCredentials
+	  -ProxyUseDefaultCredentials
+	  Use current security context to be authenticated with the internet proxy set
+
+	  .PARAMETER AnonymousProxy
+	  -AnonymousProxy
+	  No authentication (open proxy) with the internet proxy set
+
+	  .OUTPUTS
+	  none
+	  
+	  .EXAMPLE
+	  Remove Internet Proxy and set a direct connection
+	  C:\PS> Set-FreeIPAProxy -DirectNoProxy
+
+	  .EXAMPLE
+	  Set Internet Proxy and with manual authentication
+	  $credentials = get-credential 
+	  C:\PS> Set-FreeIPAProxy -Proxy "http://myproxy:8080" -ProxyCredential $credentials
+
+	  .EXAMPLE
+	  Set Internet Proxy and with automatic authentication based on current security context
+	  C:\PS> Set-FreeIPAProxy -Proxy "http://myproxy:8080" -ProxyUseDefaultCredentials
+
+	  .EXAMPLE
+	  Set Internet Proxy and with no authentication 
+	  C:\PS> Set-FreeIPAProxy -Proxy "http://myproxy:8080" -AnonymousProxy
+	#>
+	[cmdletbinding()]
+	Param (
+	  [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$false)]
+		  [switch]$DirectNoProxy,
+	  [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$true)]
+          [ValidateScript({$_ -match "(http[s]?)(:\/\/)([^\s,]+)"})]
+	      [string]$Proxy,
+	  [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$false)]
+	      [Management.Automation.PSCredential]$ProxyCredential,
+	  [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$false)]
+		  [Switch]$ProxyUseDefaultCredentials,
+	  [Parameter(Mandatory=$false,ValueFromPipelineByPropertyName=$false)]
+		  [Switch]$AnonymousProxy
+	)
+	if ($DirectNoProxy.IsPresent){
+		$global:FreeIPAProxyParams = $null
+	} ElseIf ($Proxy) {
+		$global:FreeIPAProxyParams = @{}
+		$FreeIPAProxyParams.Add('Proxy', $Proxy)
+		if ($ProxyCredential){
+			$FreeIPAProxyParams.Add('ProxyCredential', $ProxyCredential)
+			If ($FreeIPAProxyParams.ProxyUseDefaultCredentials) {$FreeIPAProxyParams.Remove('ProxyUseDefaultCredentials')}
+		} Elseif ($ProxyUseDefaultCredentials.IsPresent){
+			$FreeIPAProxyParams.Add('ProxyUseDefaultCredentials', $ProxyUseDefaultCredentials)
+			If ($FreeIPAProxyParams.ProxyCredential) {$FreeIPAProxyParams.Remove('ProxyCredential')}
+		} ElseIf ($AnonymousProxy.IsPresent) {
+			If ($FreeIPAProxyParams.ProxyUseDefaultCredentials) {$FreeIPAProxyParams.Remove('ProxyUseDefaultCredentials')}
+			If ($FreeIPAProxyParams.ProxyCredential) {$FreeIPAProxyParams.Remove('ProxyCredential')}
+		}
+	}
 }
 function Invoke-FreeIPAAPIaci_add {
         <#
             .DESCRIPTION
-       
-    Create new ACI.
-    
+       Create new ACI.
        .PARAMETER permission
        Permission ACI grants access to
        .PARAMETER group
@@ -364,9 +476,7 @@ function Invoke-FreeIPAAPIaci_add {
 function Invoke-FreeIPAAPIaci_del {
         <#
             .DESCRIPTION
-       
-    Delete ACI.
-    
+       Delete ACI.
        .PARAMETER prefix
        Prefix used to distinguish ACI types (permission, delegation, selfservice, none)
        .PARAMETER version
@@ -417,7 +527,7 @@ function Invoke-FreeIPAAPIaci_find {
         <#
             .DESCRIPTION
        
-    Search for ACIs.
+Search for ACIs.
 
     Returns a list of ACIs
 
@@ -568,9 +678,7 @@ function Invoke-FreeIPAAPIaci_find {
 function Invoke-FreeIPAAPIaci_mod {
         <#
             .DESCRIPTION
-       
-    Modify ACI.
-    
+       Modify ACI.
        .PARAMETER permission
        Permission ACI grants access to
        .PARAMETER group
@@ -692,9 +800,7 @@ function Invoke-FreeIPAAPIaci_mod {
 function Invoke-FreeIPAAPIaci_rename {
         <#
             .DESCRIPTION
-       
-    Rename an ACI.
-    
+       Rename an ACI.
        .PARAMETER permission
        Permission ACI grants access to
        .PARAMETER group
@@ -822,9 +928,7 @@ function Invoke-FreeIPAAPIaci_rename {
 function Invoke-FreeIPAAPIaci_show {
         <#
             .DESCRIPTION
-       
-    Display a single ACI given an ACI name.
-    
+       Display a single ACI given an ACI name.
        .PARAMETER prefix
        Prefix used to distinguish ACI types (permission, delegation, selfservice, none)
        .PARAMETER location
@@ -1414,6 +1518,89 @@ function Invoke-FreeIPAAPIautomember_find {
         $JsonObject = New-Object psobject -property @{
                 id		= 0
                 method	= "automember_find/1"
+                params  = @(@($criteria),$ObjParams)
+            }
+        if (!($FullResultsOutput.IsPresent)) {
+                (Invoke-FreeIPAAPI $JsonObject).result.result
+            } else {
+                Invoke-FreeIPAAPI $JsonObject
+            }
+    }
+}
+function Invoke-FreeIPAAPIautomember_find_orphans {
+        <#
+            .DESCRIPTION
+       
+    Search for orphan automember rules. The command might need to be run as
+    a privileged user user to get all orphan rules.
+    
+       .PARAMETER desc
+       A description of this auto member rule
+       .PARAMETER type
+       Grouping to which the rule applies
+       .PARAMETER remove
+       Remove orphan automember rules
+       .PARAMETER all
+       Retrieve and print all attributes from the server. Affects command output.
+       .PARAMETER raw
+       Print entries as stored on the server. Only affects output format.
+       .PARAMETER version
+       Client version. Used to determine if server will accept request.
+       .PARAMETER pkey_only
+       Results should contain primary key attribute only ("automember-rule")
+       .PARAMETER criteria
+       A string searched in all relevant object attributes
+    #>
+    [CmdletBinding()]
+        [OutputType([psobject])]
+            Param(
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$desc,
+               [parameter(Mandatory=$true)]
+                    [ValidateSet("group","hostgroup")]
+                [String]$type,
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$remove,
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$all,
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$raw,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$version,
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$pkey_only,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$criteria,
+               [parameter(Mandatory=$false)]
+                    [switch]$FullResultsOutput
+           )
+    process {
+        If ($version) {
+                $ObjParams = New-Object psobject -property @{
+                    version = $version
+                }
+            } else {
+                $ObjParams = New-Object psobject -property @{
+                    version = $global:FreeIPAAPIServerConfig.ClientVersion
+                }
+            }
+       if ($desc) { $ObjParams | Add-Member -NotePropertyName description -NotePropertyValue $desc }
+       if ($type) { $ObjParams | Add-Member -NotePropertyName type -NotePropertyValue $type }
+       if ($remove.IsPresent) { $ObjParams | Add-Member -NotePropertyName remove -NotePropertyValue $true }
+       if ($all.IsPresent) { $ObjParams | Add-Member -NotePropertyName all -NotePropertyValue $true }
+       if ($raw.IsPresent) { $ObjParams | Add-Member -NotePropertyName raw -NotePropertyValue $true }
+
+       if ($pkey_only.IsPresent) { $ObjParams | Add-Member -NotePropertyName pkey_only -NotePropertyValue $true }
+        $JsonObject = New-Object psobject -property @{
+                id		= 0
+                method	= "automember_find_orphans/1"
                 params  = @(@($criteria),$ObjParams)
             }
         if (!($FullResultsOutput.IsPresent)) {
@@ -2972,6 +3159,7 @@ function Invoke-FreeIPAAPIautomountmap_show {
 function Invoke-FreeIPAAPIbatch {
         <#
             .DESCRIPTION
+       Make multiple ipa calls via one remote procedure call
        .PARAMETER version
        Client version. Used to determine if server will accept request.
        .PARAMETER methods
@@ -4632,9 +4820,7 @@ function Invoke-FreeIPAAPIca_find {
 function Invoke-FreeIPAAPIca_is_enabled {
         <#
             .DESCRIPTION
-       
-    Checks if any of the servers has the CA service enabled.
-    
+       Checks if any of the servers has the CA service enabled.
        .PARAMETER version
        Client version. Used to determine if server will accept request.
     #>
@@ -5975,7 +6161,7 @@ function Invoke-FreeIPAAPIcert_find {
        .PARAMETER ca
        Name of issuing CA
        .PARAMETER subject
-       Subject
+       Match cn attribute in subject
        .PARAMETER min_serial_number
        minimum serial number
        .PARAMETER max_serial_number
@@ -6100,10 +6286,10 @@ function Invoke-FreeIPAAPIcert_find {
                     
                 [switch]$no_members,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$users,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$no_users,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -6635,6 +6821,7 @@ function Invoke-FreeIPAAPIclass_show {
 function Invoke-FreeIPAAPIcommand_defaults {
         <#
             .DESCRIPTION
+       Return command defaults
        .PARAMETER params
        <params>
        .PARAMETER kw
@@ -6850,6 +7037,8 @@ function Invoke-FreeIPAAPIconfig_mod {
        Modify configuration options.
        .PARAMETER maxusername
        Maximum username length
+       .PARAMETER maxhostname
+       Maximum hostname length
        .PARAMETER homedirectory
        Default location of home directories
        .PARAMETER defaultshell
@@ -6914,6 +7103,9 @@ last, after all sets and adds.
                 [int]$maxusername,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
+                [int]$maxhostname,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
                 [String]$homedirectory,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -6961,7 +7153,7 @@ last, after all sets and adds.
                     [ValidateSet("MS-PAC","PAD","nfs:NONE")]
                 [String[]]$pac_type,
                [parameter(Mandatory=$false)]
-                    [ValidateSet("password","radius","otp","disabled")]
+                    [ValidateSet("password","radius","otp","pkinit","hardened","disabled")]
                 [String[]]$user_auth_type,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -7004,6 +7196,7 @@ last, after all sets and adds.
                 }
             }
        if ($maxusername) { $ObjParams | Add-Member -NotePropertyName ipamaxusernamelength -NotePropertyValue $maxusername }
+       if ($maxhostname) { $ObjParams | Add-Member -NotePropertyName ipamaxhostnamelength -NotePropertyValue $maxhostname }
        if ($homedirectory) { $ObjParams | Add-Member -NotePropertyName ipahomesrootdir -NotePropertyValue $homedirectory }
        if ($defaultshell) { $ObjParams | Add-Member -NotePropertyName ipadefaultloginshell -NotePropertyValue $defaultshell }
        if ($defaultgroup) { $ObjParams | Add-Member -NotePropertyName ipadefaultprimarygroup -NotePropertyValue $defaultgroup }
@@ -7102,6 +7295,7 @@ function Invoke-FreeIPAAPIconfig_show {
 function Invoke-FreeIPAAPIcosentry_add {
         <#
             .DESCRIPTION
+       Add Class of Service entry
        .PARAMETER krbpwdpolicyreference
        <krbpwdpolicyreference>
        .PARAMETER cospriority
@@ -7183,6 +7377,7 @@ must be part of the schema.
 function Invoke-FreeIPAAPIcosentry_del {
         <#
             .DESCRIPTION
+       Delete Class of Service entry
        .PARAMETER continue
        Continuous mode: Don't stop on errors.
        .PARAMETER version
@@ -7232,6 +7427,7 @@ function Invoke-FreeIPAAPIcosentry_del {
 function Invoke-FreeIPAAPIcosentry_find {
         <#
             .DESCRIPTION
+       Search for Class of Service entry
        .PARAMETER cn
        <cn>
        .PARAMETER krbpwdpolicyreference
@@ -7323,6 +7519,7 @@ function Invoke-FreeIPAAPIcosentry_find {
 function Invoke-FreeIPAAPIcosentry_mod {
         <#
             .DESCRIPTION
+       Modify Class of Service entry
        .PARAMETER krbpwdpolicyreference
        <krbpwdpolicyreference>
        .PARAMETER cospriority
@@ -7417,6 +7614,7 @@ last, after all sets and adds.
 function Invoke-FreeIPAAPIcosentry_show {
         <#
             .DESCRIPTION
+       Display Class of Service entry
        .PARAMETER rights
        Display the access rights of this entry (requires -all). See ipa man page for details.
        .PARAMETER all
@@ -9475,9 +9673,7 @@ function Invoke-FreeIPAAPIdnsrecord_del {
 function Invoke-FreeIPAAPIdnsrecord_delentry {
         <#
             .DESCRIPTION
-       
-    Delete DNS record entry.
-    
+       Delete DNS record entry.
        .PARAMETER continue
        Continuous mode: Don't stop on errors.
        .PARAMETER version
@@ -10528,6 +10724,7 @@ function Invoke-FreeIPAAPIdnsrecord_show {
 function Invoke-FreeIPAAPIdnsrecord_split_parts {
         <#
             .DESCRIPTION
+       Split DNS record to parts
        .PARAMETER version
        Client version. Used to determine if server will accept request.
        .PARAMETER name
@@ -11760,9 +11957,7 @@ function Invoke-FreeIPAAPIdnszone_show {
 function Invoke-FreeIPAAPIdns_is_enabled {
         <#
             .DESCRIPTION
-       
-    Checks if any of the servers has the DNS service enabled.
-    
+       Checks if any of the servers has the DNS service enabled.
        .PARAMETER version
        Client version. Used to determine if server will accept request.
     #>
@@ -12096,7 +12291,7 @@ must be part of the schema.
                     
                 [switch]$no_members,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$group_name,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -12151,6 +12346,8 @@ function Invoke-FreeIPAAPIgroup_add_member {
        users to add
        .PARAMETER groups
        groups to add
+       .PARAMETER services
+       services to add
        .PARAMETER group_name
        Group name
     #>
@@ -12178,8 +12375,11 @@ function Invoke-FreeIPAAPIgroup_add_member {
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
                 [String[]]$groups,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String[]]$services,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$group_name,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -12201,9 +12401,84 @@ function Invoke-FreeIPAAPIgroup_add_member {
        if ($no_members.IsPresent) { $ObjParams | Add-Member -NotePropertyName no_members -NotePropertyValue $true }
        if ($users) { $ObjParams | Add-Member -NotePropertyName user -NotePropertyValue $users }
        if ($groups) { $ObjParams | Add-Member -NotePropertyName group -NotePropertyValue $groups }
+       if ($services) { $ObjParams | Add-Member -NotePropertyName service -NotePropertyValue $services }
         $JsonObject = New-Object psobject -property @{
                 id		= 0
                 method	= "group_add_member/1"
+                params  = @(@($group_name),$ObjParams)
+            }
+        if (!($FullResultsOutput.IsPresent)) {
+                (Invoke-FreeIPAAPI $JsonObject).result.result
+            } else {
+                Invoke-FreeIPAAPI $JsonObject
+            }
+    }
+}
+function Invoke-FreeIPAAPIgroup_add_member_manager {
+        <#
+            .DESCRIPTION
+       Add users that can manage members of this group.
+       .PARAMETER all
+       Retrieve and print all attributes from the server. Affects command output.
+       .PARAMETER raw
+       Print entries as stored on the server. Only affects output format.
+       .PARAMETER version
+       Client version. Used to determine if server will accept request.
+       .PARAMETER no_members
+       Suppress processing of membership attributes.
+       .PARAMETER users
+       users to add
+       .PARAMETER groups
+       groups to add
+       .PARAMETER group_name
+       Group name
+    #>
+    [CmdletBinding()]
+        [OutputType([psobject])]
+            Param(
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$all,
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$raw,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$version,
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$no_members,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String[]]$users,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String[]]$groups,
+               [parameter(Mandatory=$true)]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                [String]$group_name,
+               [parameter(Mandatory=$false)]
+                    [switch]$FullResultsOutput
+           )
+    process {
+        If ($version) {
+                $ObjParams = New-Object psobject -property @{
+                    version = $version
+                }
+            } else {
+                $ObjParams = New-Object psobject -property @{
+                    version = $global:FreeIPAAPIServerConfig.ClientVersion
+                }
+            }
+       if ($all.IsPresent) { $ObjParams | Add-Member -NotePropertyName all -NotePropertyValue $true }
+       if ($raw.IsPresent) { $ObjParams | Add-Member -NotePropertyName raw -NotePropertyValue $true }
+
+       if ($no_members.IsPresent) { $ObjParams | Add-Member -NotePropertyName no_members -NotePropertyValue $true }
+       if ($users) { $ObjParams | Add-Member -NotePropertyName user -NotePropertyValue $users }
+       if ($groups) { $ObjParams | Add-Member -NotePropertyName group -NotePropertyValue $groups }
+        $JsonObject = New-Object psobject -property @{
+                id		= 0
+                method	= "group_add_member_manager/1"
                 params  = @(@($group_name),$ObjParams)
             }
         if (!($FullResultsOutput.IsPresent)) {
@@ -12234,7 +12509,7 @@ function Invoke-FreeIPAAPIgroup_del {
                     [ValidateNotNullOrEmpty()]
                 [String]$version,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$group_name,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -12279,7 +12554,7 @@ function Invoke-FreeIPAAPIgroup_detach {
                     [ValidateNotNullOrEmpty()]
                 [String]$version,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$group_name,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -12347,6 +12622,10 @@ function Invoke-FreeIPAAPIgroup_find {
        Search for groups with these member groups.
        .PARAMETER no_groups
        Search for groups without these member groups.
+       .PARAMETER services
+       Search for groups with these member services.
+       .PARAMETER no_services
+       Search for groups without these member services.
        .PARAMETER in_groups
        Search for groups with these member of groups.
        .PARAMETER not_in_groups
@@ -12367,6 +12646,14 @@ function Invoke-FreeIPAAPIgroup_find {
        Search for groups with these member of sudo rules.
        .PARAMETER not_in_sudorules
        Search for groups without these member of sudo rules.
+       .PARAMETER membermanager_users
+       Search for groups with these group membership managed by users.
+       .PARAMETER not_membermanager_users
+       Search for groups without these group membership managed by users.
+       .PARAMETER membermanager_groups
+       Search for groups with these group membership managed by groups.
+       .PARAMETER not_membermanager_groups
+       Search for groups without these group membership managed by groups.
        .PARAMETER criteria
        A string searched in all relevant object attributes
     #>
@@ -12374,7 +12661,7 @@ function Invoke-FreeIPAAPIgroup_find {
         [OutputType([psobject])]
             Param(
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$group_name,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -12416,22 +12703,28 @@ function Invoke-FreeIPAAPIgroup_find {
                     
                 [switch]$pkey_only,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$users,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$no_users,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$groups,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$no_groups,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidateNotNullOrEmpty()]
+                [String[]]$services,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String[]]$no_services,
+               [parameter(Mandatory=$false)]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$in_groups,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$not_in_groups,
                [parameter(Mandatory=$false)]
                     [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*$")]
@@ -12457,6 +12750,18 @@ function Invoke-FreeIPAAPIgroup_find {
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
                 [String[]]$not_in_sudorules,
+               [parameter(Mandatory=$false)]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                [String[]]$membermanager_users,
+               [parameter(Mandatory=$false)]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                [String[]]$not_membermanager_users,
+               [parameter(Mandatory=$false)]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                [String[]]$membermanager_groups,
+               [parameter(Mandatory=$false)]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                [String[]]$not_membermanager_groups,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
                 [String]$criteria,
@@ -12491,6 +12796,8 @@ function Invoke-FreeIPAAPIgroup_find {
        if ($no_users) { $ObjParams | Add-Member -NotePropertyName no_user -NotePropertyValue $no_users }
        if ($groups) { $ObjParams | Add-Member -NotePropertyName group -NotePropertyValue $groups }
        if ($no_groups) { $ObjParams | Add-Member -NotePropertyName no_group -NotePropertyValue $no_groups }
+       if ($services) { $ObjParams | Add-Member -NotePropertyName service -NotePropertyValue $services }
+       if ($no_services) { $ObjParams | Add-Member -NotePropertyName no_service -NotePropertyValue $no_services }
        if ($in_groups) { $ObjParams | Add-Member -NotePropertyName in_group -NotePropertyValue $in_groups }
        if ($not_in_groups) { $ObjParams | Add-Member -NotePropertyName not_in_group -NotePropertyValue $not_in_groups }
        if ($in_netgroups) { $ObjParams | Add-Member -NotePropertyName in_netgroup -NotePropertyValue $in_netgroups }
@@ -12501,6 +12808,10 @@ function Invoke-FreeIPAAPIgroup_find {
        if ($not_in_hbacrules) { $ObjParams | Add-Member -NotePropertyName not_in_hbacrule -NotePropertyValue $not_in_hbacrules }
        if ($in_sudorules) { $ObjParams | Add-Member -NotePropertyName in_sudorule -NotePropertyValue $in_sudorules }
        if ($not_in_sudorules) { $ObjParams | Add-Member -NotePropertyName not_in_sudorule -NotePropertyValue $not_in_sudorules }
+       if ($membermanager_users) { $ObjParams | Add-Member -NotePropertyName membermanager_user -NotePropertyValue $membermanager_users }
+       if ($not_membermanager_users) { $ObjParams | Add-Member -NotePropertyName not_membermanager_user -NotePropertyValue $not_membermanager_users }
+       if ($membermanager_groups) { $ObjParams | Add-Member -NotePropertyName membermanager_group -NotePropertyValue $membermanager_groups }
+       if ($not_membermanager_groups) { $ObjParams | Add-Member -NotePropertyName not_membermanager_group -NotePropertyValue $not_membermanager_groups }
         $JsonObject = New-Object psobject -property @{
                 id		= 0
                 method	= "group_find/1"
@@ -12589,10 +12900,10 @@ last, after all sets and adds.
                     
                 [switch]$no_members,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$rename,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$group_name,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -12650,6 +12961,8 @@ function Invoke-FreeIPAAPIgroup_remove_member {
        users to remove
        .PARAMETER groups
        groups to remove
+       .PARAMETER services
+       services to remove
        .PARAMETER group_name
        Group name
     #>
@@ -12677,8 +12990,11 @@ function Invoke-FreeIPAAPIgroup_remove_member {
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
                 [String[]]$groups,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String[]]$services,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$group_name,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -12700,9 +13016,84 @@ function Invoke-FreeIPAAPIgroup_remove_member {
        if ($no_members.IsPresent) { $ObjParams | Add-Member -NotePropertyName no_members -NotePropertyValue $true }
        if ($users) { $ObjParams | Add-Member -NotePropertyName user -NotePropertyValue $users }
        if ($groups) { $ObjParams | Add-Member -NotePropertyName group -NotePropertyValue $groups }
+       if ($services) { $ObjParams | Add-Member -NotePropertyName service -NotePropertyValue $services }
         $JsonObject = New-Object psobject -property @{
                 id		= 0
                 method	= "group_remove_member/1"
+                params  = @(@($group_name),$ObjParams)
+            }
+        if (!($FullResultsOutput.IsPresent)) {
+                (Invoke-FreeIPAAPI $JsonObject).result.result
+            } else {
+                Invoke-FreeIPAAPI $JsonObject
+            }
+    }
+}
+function Invoke-FreeIPAAPIgroup_remove_member_manager {
+        <#
+            .DESCRIPTION
+       Remove users that can manage members of this group.
+       .PARAMETER all
+       Retrieve and print all attributes from the server. Affects command output.
+       .PARAMETER raw
+       Print entries as stored on the server. Only affects output format.
+       .PARAMETER version
+       Client version. Used to determine if server will accept request.
+       .PARAMETER no_members
+       Suppress processing of membership attributes.
+       .PARAMETER users
+       users to remove
+       .PARAMETER groups
+       groups to remove
+       .PARAMETER group_name
+       Group name
+    #>
+    [CmdletBinding()]
+        [OutputType([psobject])]
+            Param(
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$all,
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$raw,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$version,
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$no_members,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String[]]$users,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String[]]$groups,
+               [parameter(Mandatory=$true)]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                [String]$group_name,
+               [parameter(Mandatory=$false)]
+                    [switch]$FullResultsOutput
+           )
+    process {
+        If ($version) {
+                $ObjParams = New-Object psobject -property @{
+                    version = $version
+                }
+            } else {
+                $ObjParams = New-Object psobject -property @{
+                    version = $global:FreeIPAAPIServerConfig.ClientVersion
+                }
+            }
+       if ($all.IsPresent) { $ObjParams | Add-Member -NotePropertyName all -NotePropertyValue $true }
+       if ($raw.IsPresent) { $ObjParams | Add-Member -NotePropertyName raw -NotePropertyValue $true }
+
+       if ($no_members.IsPresent) { $ObjParams | Add-Member -NotePropertyName no_members -NotePropertyValue $true }
+       if ($users) { $ObjParams | Add-Member -NotePropertyName user -NotePropertyValue $users }
+       if ($groups) { $ObjParams | Add-Member -NotePropertyName group -NotePropertyValue $groups }
+        $JsonObject = New-Object psobject -property @{
+                id		= 0
+                method	= "group_remove_member_manager/1"
                 params  = @(@($group_name),$ObjParams)
             }
         if (!($FullResultsOutput.IsPresent)) {
@@ -12748,7 +13139,7 @@ function Invoke-FreeIPAAPIgroup_show {
                     
                 [switch]$no_members,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$group_name,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -13050,6 +13441,7 @@ function Invoke-FreeIPAAPIhbacrule_add_service {
 function Invoke-FreeIPAAPIhbacrule_add_sourcehost {
         <#
             .DESCRIPTION
+       Add source hosts and hostgroups to an HBAC rule.
        .PARAMETER all
        Retrieve and print all attributes from the server. Affects command output.
        .PARAMETER raw
@@ -13750,6 +14142,7 @@ function Invoke-FreeIPAAPIhbacrule_remove_service {
 function Invoke-FreeIPAAPIhbacrule_remove_sourcehost {
         <#
             .DESCRIPTION
+       Remove source hosts and hostgroups from an HBAC rule.
        .PARAMETER all
        Retrieve and print all attributes from the server. Affects command output.
        .PARAMETER raw
@@ -15116,6 +15509,80 @@ function Invoke-FreeIPAAPIhostgroup_add_member {
             }
     }
 }
+function Invoke-FreeIPAAPIhostgroup_add_member_manager {
+        <#
+            .DESCRIPTION
+       Add users that can manage members of this hostgroup.
+       .PARAMETER all
+       Retrieve and print all attributes from the server. Affects command output.
+       .PARAMETER raw
+       Print entries as stored on the server. Only affects output format.
+       .PARAMETER version
+       Client version. Used to determine if server will accept request.
+       .PARAMETER no_members
+       Suppress processing of membership attributes.
+       .PARAMETER users
+       users to add
+       .PARAMETER groups
+       groups to add
+       .PARAMETER hostgroup_name
+       Name of host-group
+    #>
+    [CmdletBinding()]
+        [OutputType([psobject])]
+            Param(
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$all,
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$raw,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$version,
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$no_members,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String[]]$users,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String[]]$groups,
+               [parameter(Mandatory=$true)]
+                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*$")]
+                [String]$hostgroup_name,
+               [parameter(Mandatory=$false)]
+                    [switch]$FullResultsOutput
+           )
+    process {
+        If ($version) {
+                $ObjParams = New-Object psobject -property @{
+                    version = $version
+                }
+            } else {
+                $ObjParams = New-Object psobject -property @{
+                    version = $global:FreeIPAAPIServerConfig.ClientVersion
+                }
+            }
+       if ($all.IsPresent) { $ObjParams | Add-Member -NotePropertyName all -NotePropertyValue $true }
+       if ($raw.IsPresent) { $ObjParams | Add-Member -NotePropertyName raw -NotePropertyValue $true }
+
+       if ($no_members.IsPresent) { $ObjParams | Add-Member -NotePropertyName no_members -NotePropertyValue $true }
+       if ($users) { $ObjParams | Add-Member -NotePropertyName user -NotePropertyValue $users }
+       if ($groups) { $ObjParams | Add-Member -NotePropertyName group -NotePropertyValue $groups }
+        $JsonObject = New-Object psobject -property @{
+                id		= 0
+                method	= "hostgroup_add_member_manager/1"
+                params  = @(@($hostgroup_name),$ObjParams)
+            }
+        if (!($FullResultsOutput.IsPresent)) {
+                (Invoke-FreeIPAAPI $JsonObject).result.result
+            } else {
+                Invoke-FreeIPAAPI $JsonObject
+            }
+    }
+}
 function Invoke-FreeIPAAPIhostgroup_del {
         <#
             .DESCRIPTION
@@ -15212,6 +15679,14 @@ function Invoke-FreeIPAAPIhostgroup_find {
        Search for host groups with these member of sudo rules.
        .PARAMETER not_in_sudorules
        Search for host groups without these member of sudo rules.
+       .PARAMETER membermanager_users
+       Search for host groups with these group membership managed by users.
+       .PARAMETER not_membermanager_users
+       Search for host groups without these group membership managed by users.
+       .PARAMETER membermanager_groups
+       Search for host groups with these group membership managed by groups.
+       .PARAMETER not_membermanager_groups
+       Search for host groups without these group membership managed by groups.
        .PARAMETER criteria
        A string searched in all relevant object attributes
     #>
@@ -15282,6 +15757,18 @@ function Invoke-FreeIPAAPIhostgroup_find {
                     [ValidateNotNullOrEmpty()]
                 [String[]]$not_in_sudorules,
                [parameter(Mandatory=$false)]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                [String[]]$membermanager_users,
+               [parameter(Mandatory=$false)]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                [String[]]$not_membermanager_users,
+               [parameter(Mandatory=$false)]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                [String[]]$membermanager_groups,
+               [parameter(Mandatory=$false)]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                [String[]]$not_membermanager_groups,
+               [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
                 [String]$criteria,
                [parameter(Mandatory=$false)]
@@ -15318,6 +15805,10 @@ function Invoke-FreeIPAAPIhostgroup_find {
        if ($not_in_hbacrules) { $ObjParams | Add-Member -NotePropertyName not_in_hbacrule -NotePropertyValue $not_in_hbacrules }
        if ($in_sudorules) { $ObjParams | Add-Member -NotePropertyName in_sudorule -NotePropertyValue $in_sudorules }
        if ($not_in_sudorules) { $ObjParams | Add-Member -NotePropertyName not_in_sudorule -NotePropertyValue $not_in_sudorules }
+       if ($membermanager_users) { $ObjParams | Add-Member -NotePropertyName membermanager_user -NotePropertyValue $membermanager_users }
+       if ($not_membermanager_users) { $ObjParams | Add-Member -NotePropertyName not_membermanager_user -NotePropertyValue $not_membermanager_users }
+       if ($membermanager_groups) { $ObjParams | Add-Member -NotePropertyName membermanager_group -NotePropertyValue $membermanager_groups }
+       if ($not_membermanager_groups) { $ObjParams | Add-Member -NotePropertyName not_membermanager_group -NotePropertyValue $not_membermanager_groups }
         $JsonObject = New-Object psobject -property @{
                 id		= 0
                 method	= "hostgroup_find/1"
@@ -15499,6 +15990,80 @@ function Invoke-FreeIPAAPIhostgroup_remove_member {
             }
     }
 }
+function Invoke-FreeIPAAPIhostgroup_remove_member_manager {
+        <#
+            .DESCRIPTION
+       Remove users that can manage members of this hostgroup.
+       .PARAMETER all
+       Retrieve and print all attributes from the server. Affects command output.
+       .PARAMETER raw
+       Print entries as stored on the server. Only affects output format.
+       .PARAMETER version
+       Client version. Used to determine if server will accept request.
+       .PARAMETER no_members
+       Suppress processing of membership attributes.
+       .PARAMETER users
+       users to remove
+       .PARAMETER groups
+       groups to remove
+       .PARAMETER hostgroup_name
+       Name of host-group
+    #>
+    [CmdletBinding()]
+        [OutputType([psobject])]
+            Param(
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$all,
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$raw,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$version,
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$no_members,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String[]]$users,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String[]]$groups,
+               [parameter(Mandatory=$true)]
+                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*$")]
+                [String]$hostgroup_name,
+               [parameter(Mandatory=$false)]
+                    [switch]$FullResultsOutput
+           )
+    process {
+        If ($version) {
+                $ObjParams = New-Object psobject -property @{
+                    version = $version
+                }
+            } else {
+                $ObjParams = New-Object psobject -property @{
+                    version = $global:FreeIPAAPIServerConfig.ClientVersion
+                }
+            }
+       if ($all.IsPresent) { $ObjParams | Add-Member -NotePropertyName all -NotePropertyValue $true }
+       if ($raw.IsPresent) { $ObjParams | Add-Member -NotePropertyName raw -NotePropertyValue $true }
+
+       if ($no_members.IsPresent) { $ObjParams | Add-Member -NotePropertyName no_members -NotePropertyValue $true }
+       if ($users) { $ObjParams | Add-Member -NotePropertyName user -NotePropertyValue $users }
+       if ($groups) { $ObjParams | Add-Member -NotePropertyName group -NotePropertyValue $groups }
+        $JsonObject = New-Object psobject -property @{
+                id		= 0
+                method	= "hostgroup_remove_member_manager/1"
+                params  = @(@($hostgroup_name),$ObjParams)
+            }
+        if (!($FullResultsOutput.IsPresent)) {
+                (Invoke-FreeIPAAPI $JsonObject).result.result
+            } else {
+                Invoke-FreeIPAAPI $JsonObject
+            }
+    }
+}
 function Invoke-FreeIPAAPIhostgroup_show {
         <#
             .DESCRIPTION
@@ -15596,7 +16161,7 @@ function Invoke-FreeIPAAPIhost_add {
        .PARAMETER ipaassignedidview
        Assigned ID View
        .PARAMETER auth_ind
-       Defines a whitelist for Authentication Indicators. Use 'otp' to allow OTP-based 2FA authentications. Use 'radius' to allow RADIUS-based 2FA authentications. Other values may be used for custom configurations.
+       Defines a whitelist for Authentication Indicators. Use 'otp' to allow OTP-based 2FA authentications. Use 'radius' to allow RADIUS-based 2FA authentications. Use 'pkinit' to allow PKINIT-based 2FA authentications. Use 'hardened' to allow brute-force hardened password authentication by SPAKE or FAST. With no indicator specified, all authentication mechanisms are allowed.
        .PARAMETER requires_pre_auth
        Pre-authentication is required for the service
        .PARAMETER ok_as_delegate
@@ -15666,7 +16231,7 @@ must be part of the schema.
                     [ValidateNotNullOrEmpty()]
                 [String]$ipaassignedidview,
                [parameter(Mandatory=$false)]
-                    [ValidateNotNullOrEmpty()]
+                    [ValidateSet("radius","otp","pkinit","hardened")]
                 [String[]]$auth_ind,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -15720,7 +16285,7 @@ must be part of the schema.
                     version = $global:FreeIPAAPIServerConfig.ClientVersion
                 }
             }
-       if ($password) { $password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
+       if ($password) { [string]$password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
        if ($desc) { $ObjParams | Add-Member -NotePropertyName description -NotePropertyValue $desc }
        if ($locality) { $ObjParams | Add-Member -NotePropertyName l -NotePropertyValue $locality }
        if ($location) { $ObjParams | Add-Member -NotePropertyName nshostlocation -NotePropertyValue $location }
@@ -16421,8 +16986,6 @@ function Invoke-FreeIPAAPIhost_find {
        Host hardware platform (e.g. "Lenovo T61")
        .PARAMETER os
        Host operating system and version (e.g. "Fedora 9")
-       .PARAMETER password
-       Password used in bulk enrollment
        .PARAMETER certificate
        Base-64 encoded host certificate
        .PARAMETER macaddress
@@ -16432,7 +16995,7 @@ function Invoke-FreeIPAAPIhost_find {
        .PARAMETER ipaassignedidview
        Assigned ID View
        .PARAMETER auth_ind
-       Defines a whitelist for Authentication Indicators. Use 'otp' to allow OTP-based 2FA authentications. Use 'radius' to allow RADIUS-based 2FA authentications. Other values may be used for custom configurations.
+       Defines a whitelist for Authentication Indicators. Use 'otp' to allow OTP-based 2FA authentications. Use 'radius' to allow RADIUS-based 2FA authentications. Use 'pkinit' to allow PKINIT-based 2FA authentications. Use 'hardened' to allow brute-force hardened password authentication by SPAKE or FAST. With no indicator specified, all authentication mechanisms are allowed.
        .PARAMETER timelimit
        Time limit of search in seconds (0 is unlimited)
        .PARAMETER sizelimit
@@ -16505,9 +17068,6 @@ function Invoke-FreeIPAAPIhost_find {
                 [String]$os,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
-                [SecureString]$password,
-               [parameter(Mandatory=$false)]
-                    [ValidateNotNullOrEmpty()]
                 [String[]]$certificate,
                [parameter(Mandatory=$false)]
                     [ValidatePattern("^([a-fA-F0-9]{2}[:|\-]?){5}[a-fA-F0-9]{2}$")]
@@ -16519,7 +17079,7 @@ function Invoke-FreeIPAAPIhost_find {
                     [ValidateNotNullOrEmpty()]
                 [String]$ipaassignedidview,
                [parameter(Mandatory=$false)]
-                    [ValidateNotNullOrEmpty()]
+                    [ValidateSet("radius","otp","pkinit","hardened")]
                 [String[]]$auth_ind,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -16573,10 +17133,10 @@ function Invoke-FreeIPAAPIhost_find {
                     [ValidateNotNullOrEmpty()]
                 [String[]]$not_in_sudorules,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$enroll_by_users,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$not_enroll_by_users,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -16606,14 +17166,12 @@ function Invoke-FreeIPAAPIhost_find {
                     version = $global:FreeIPAAPIServerConfig.ClientVersion
                 }
             }
-       if ($password) { $password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
        if ($hostname) { $ObjParams | Add-Member -NotePropertyName fqdn -NotePropertyValue $hostname }
        if ($desc) { $ObjParams | Add-Member -NotePropertyName description -NotePropertyValue $desc }
        if ($locality) { $ObjParams | Add-Member -NotePropertyName l -NotePropertyValue $locality }
        if ($location) { $ObjParams | Add-Member -NotePropertyName nshostlocation -NotePropertyValue $location }
        if ($platform) { $ObjParams | Add-Member -NotePropertyName nshardwareplatform -NotePropertyValue $platform }
        if ($os) { $ObjParams | Add-Member -NotePropertyName nsosversion -NotePropertyValue $os }
-       if ($password) { $ObjParams | Add-Member -NotePropertyName userpassword -NotePropertyValue $password }
        if ($certificate) { $ObjParams | Add-Member -NotePropertyName usercertificate -NotePropertyValue $certificate }
        if ($macaddress) { $ObjParams | Add-Member -NotePropertyName macaddress -NotePropertyValue $macaddress }
        if ($class) { $ObjParams | Add-Member -NotePropertyName userclass -NotePropertyValue $class }
@@ -16685,7 +17243,7 @@ function Invoke-FreeIPAAPIhost_mod {
        .PARAMETER ipaassignedidview
        Assigned ID View
        .PARAMETER auth_ind
-       Defines a whitelist for Authentication Indicators. Use 'otp' to allow OTP-based 2FA authentications. Use 'radius' to allow RADIUS-based 2FA authentications. Other values may be used for custom configurations.
+       Defines a whitelist for Authentication Indicators. Use 'otp' to allow OTP-based 2FA authentications. Use 'radius' to allow RADIUS-based 2FA authentications. Use 'pkinit' to allow PKINIT-based 2FA authentications. Use 'hardened' to allow brute-force hardened password authentication by SPAKE or FAST. With no indicator specified, all authentication mechanisms are allowed.
        .PARAMETER requires_pre_auth
        Pre-authentication is required for the service
        .PARAMETER ok_as_delegate
@@ -16759,7 +17317,7 @@ last, after all sets and adds.
                     [ValidateNotNullOrEmpty()]
                 [String]$ipaassignedidview,
                [parameter(Mandatory=$false)]
-                    [ValidateNotNullOrEmpty()]
+                    [ValidateSet("radius","otp","pkinit","hardened")]
                 [String[]]$auth_ind,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -16813,7 +17371,7 @@ last, after all sets and adds.
                     version = $global:FreeIPAAPIServerConfig.ClientVersion
                 }
             }
-       if ($password) { $password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
+       if ($password) { [string]$password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
        if ($desc) { $ObjParams | Add-Member -NotePropertyName description -NotePropertyValue $desc }
        if ($locality) { $ObjParams | Add-Member -NotePropertyName l -NotePropertyValue $locality }
        if ($location) { $ObjParams | Add-Member -NotePropertyName nshostlocation -NotePropertyValue $location }
@@ -17132,6 +17690,7 @@ function Invoke-FreeIPAAPIhost_show {
 function Invoke-FreeIPAAPIi18n_messages {
         <#
             .DESCRIPTION
+       Internationalization messages
        .PARAMETER version
        Client version. Used to determine if server will accept request.
     #>
@@ -17203,7 +17762,7 @@ must be part of the schema.
                     [ValidateNotNullOrEmpty()]
                 [String]$desc,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$group_name,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -17368,7 +17927,7 @@ function Invoke-FreeIPAAPIidoverridegroup_find {
                     [ValidateNotNullOrEmpty()]
                 [String]$desc,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$group_name,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -17479,7 +18038,7 @@ last, after all sets and adds.
                     [ValidateNotNullOrEmpty()]
                 [String]$desc,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$group_name,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -17677,7 +18236,7 @@ must be part of the schema.
                     [ValidateNotNullOrEmpty()]
                 [String]$desc,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -17953,7 +18512,7 @@ function Invoke-FreeIPAAPIidoverrideuser_find {
                     [ValidateNotNullOrEmpty()]
                 [String]$desc,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -18098,7 +18657,7 @@ last, after all sets and adds.
                     [ValidateNotNullOrEmpty()]
                 [String]$desc,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -18383,7 +18942,6 @@ IDs,cn=Distributed Numeric Assignment Plugin,cn=plugins,cn=config' has to be
 modified to match the new range.
 =======
 
-
        .PARAMETER base_id
        First Posix ID of the range
        .PARAMETER range_size
@@ -18397,7 +18955,7 @@ modified to match the new range.
        .PARAMETER dom_name
        Name of the trusted domain
        .PARAMETER type
-       ID range type, one of ipa-ad-trust, ipa-ad-trust-posix, ipa-local
+       ID range type, one of allowed values
        .PARAMETER setattr
        Set an attribute to a name/value pair. Format is attr=value.
 For multi-valued attributes, the command replaces the values already present.
@@ -18559,7 +19117,7 @@ function Invoke-FreeIPAAPIidrange_find {
        .PARAMETER dom_sid
        Domain SID of the trusted domain
        .PARAMETER type
-       ID range type, one of ipa-ad-trust, ipa-ad-trust-posix, ipa-local
+       ID range type, one of allowed values
        .PARAMETER timelimit
        Time limit of search in seconds (0 is unlimited)
        .PARAMETER sizelimit
@@ -18675,7 +19233,6 @@ the new local range. Specifically, The dnaNextRange attribute of 'cn=Posix
 IDs,cn=Distributed Numeric Assignment Plugin,cn=plugins,cn=config' has to be
 modified to match the new range.
 =======
-
 
        .PARAMETER base_id
        First Posix ID of the range
@@ -19403,9 +19960,7 @@ function Invoke-FreeIPAAPIjoin {
 function Invoke-FreeIPAAPIjson_metadata {
         <#
             .DESCRIPTION
-       
-    Export plugin meta-data for the webUI.
-    
+       Export plugin meta-data for the webUI.
        .PARAMETER object
        Name of object to export
        .PARAMETER method
@@ -19472,6 +20027,7 @@ function Invoke-FreeIPAAPIjson_metadata {
 function Invoke-FreeIPAAPIkra_is_enabled {
         <#
             .DESCRIPTION
+       Checks if any of the servers has the KRA service enabled
        .PARAMETER version
        Client version. Used to determine if server will accept request.
     #>
@@ -19515,6 +20071,22 @@ function Invoke-FreeIPAAPIkrbtpolicy_mod {
        Maximum ticket life (seconds)
        .PARAMETER maxrenew
        Maximum renewable age (seconds)
+       .PARAMETER otp_maxlife
+       OTP token maximum ticket life (seconds)
+       .PARAMETER otp_maxrenew
+       OTP token ticket maximum renewable age (seconds)
+       .PARAMETER radius_maxlife
+       RADIUS maximum ticket life (seconds)
+       .PARAMETER radius_maxrenew
+       RADIUS ticket maximum renewable age (seconds)
+       .PARAMETER pkinit_maxlife
+       PKINIT maximum ticket life (seconds)
+       .PARAMETER pkinit_maxrenew
+       PKINIT ticket maximum renewable age (seconds)
+       .PARAMETER hardened_maxlife
+       Hardened ticket maximum ticket life (seconds)
+       .PARAMETER hardened_maxrenew
+       Hardened ticket maximum renewable age (seconds)
        .PARAMETER setattr
        Set an attribute to a name/value pair. Format is attr=value.
 For multi-valued attributes, the command replaces the values already present.
@@ -19544,6 +20116,30 @@ last, after all sets and adds.
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
                 [int]$maxrenew,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [int]$otp_maxlife,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [int]$otp_maxrenew,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [int]$radius_maxlife,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [int]$radius_maxrenew,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [int]$pkinit_maxlife,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [int]$pkinit_maxrenew,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [int]$hardened_maxlife,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [int]$hardened_maxrenew,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
                 [String[]]$setattr,
@@ -19583,6 +20179,14 @@ last, after all sets and adds.
             }
        if ($maxlife) { $ObjParams | Add-Member -NotePropertyName krbmaxticketlife -NotePropertyValue $maxlife }
        if ($maxrenew) { $ObjParams | Add-Member -NotePropertyName krbmaxrenewableage -NotePropertyValue $maxrenew }
+       if ($otp_maxlife) { $ObjParams | Add-Member -NotePropertyName krbauthindmaxticketlife_otp -NotePropertyValue $otp_maxlife }
+       if ($otp_maxrenew) { $ObjParams | Add-Member -NotePropertyName krbauthindmaxrenewableage_otp -NotePropertyValue $otp_maxrenew }
+       if ($radius_maxlife) { $ObjParams | Add-Member -NotePropertyName krbauthindmaxticketlife_radius -NotePropertyValue $radius_maxlife }
+       if ($radius_maxrenew) { $ObjParams | Add-Member -NotePropertyName krbauthindmaxrenewableage_radius -NotePropertyValue $radius_maxrenew }
+       if ($pkinit_maxlife) { $ObjParams | Add-Member -NotePropertyName krbauthindmaxticketlife_pkinit -NotePropertyValue $pkinit_maxlife }
+       if ($pkinit_maxrenew) { $ObjParams | Add-Member -NotePropertyName krbauthindmaxrenewableage_pkinit -NotePropertyValue $pkinit_maxrenew }
+       if ($hardened_maxlife) { $ObjParams | Add-Member -NotePropertyName krbauthindmaxticketlife_hardened -NotePropertyValue $hardened_maxlife }
+       if ($hardened_maxrenew) { $ObjParams | Add-Member -NotePropertyName krbauthindmaxrenewableage_hardened -NotePropertyValue $hardened_maxrenew }
        if ($setattr) { $ObjParams | Add-Member -NotePropertyName setattr -NotePropertyValue $setattr }
        if ($addattr) { $ObjParams | Add-Member -NotePropertyName addattr -NotePropertyValue $addattr }
        if ($delattr) { $ObjParams | Add-Member -NotePropertyName delattr -NotePropertyValue $delattr }
@@ -20123,10 +20727,10 @@ function Invoke-FreeIPAAPImigrate_ds {
        LDAP search scope for users and groups: base, onelevel, or subtree. Defaults to onelevel
        .PARAMETER version
        Client version. Used to determine if server will accept request.
-       .PARAMETER exclude_groups
-       groups to exclude from migration
        .PARAMETER exclude_users
        users to exclude from migration
+       .PARAMETER exclude_groups
+       groups to exclude from migration
        .PARAMETER ldap_uri
        LDAP URI of DS server to migrate from
        .PARAMETER password
@@ -20191,10 +20795,10 @@ function Invoke-FreeIPAAPImigrate_ds {
                 [String]$version,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
-                [String[]]$exclude_groups,
+                [String[]]$exclude_users,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
-                [String[]]$exclude_users,
+                [String[]]$exclude_groups,
                [parameter(Mandatory=$true)]
                     [ValidateNotNullOrEmpty()]
                 [String]$ldap_uri,
@@ -20214,7 +20818,7 @@ function Invoke-FreeIPAAPImigrate_ds {
                     version = $global:FreeIPAAPIServerConfig.ClientVersion
                 }
             }
-       if ($password) { $password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
+       if ($password) { [string]$password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
        if ($bind_dn) { $ObjParams | Add-Member -NotePropertyName binddn -NotePropertyValue $bind_dn }
        if ($user_container) { $ObjParams | Add-Member -NotePropertyName usercontainer -NotePropertyValue $user_container }
        if ($group_container) { $ObjParams | Add-Member -NotePropertyName groupcontainer -NotePropertyValue $group_container }
@@ -20233,8 +20837,8 @@ function Invoke-FreeIPAAPImigrate_ds {
        if ($use_default_group.IsPresent) { $ObjParams | Add-Member -NotePropertyName use_def_group -NotePropertyValue $true }
        if ($scope) { $ObjParams | Add-Member -NotePropertyName scope -NotePropertyValue $scope }
 
-       if ($exclude_groups) { $ObjParams | Add-Member -NotePropertyName exclude_groups -NotePropertyValue $exclude_groups }
        if ($exclude_users) { $ObjParams | Add-Member -NotePropertyName exclude_users -NotePropertyValue $exclude_users }
+       if ($exclude_groups) { $ObjParams | Add-Member -NotePropertyName exclude_groups -NotePropertyValue $exclude_groups }
         $JsonObject = New-Object psobject -property @{
                 id		= 0
                 method	= "migrate_ds/1"
@@ -20616,16 +21220,16 @@ function Invoke-FreeIPAAPInetgroup_find {
                     [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*$")]
                 [String[]]$no_netgroups,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$users,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$no_users,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$groups,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$no_groups,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -22186,9 +22790,9 @@ function Invoke-FreeIPAAPIpasswd {
                     version = $global:FreeIPAAPIServerConfig.ClientVersion
                 }
             }
-       if ($otp) { $otp = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($otp)) }
-       if ($password) { $password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
-       if ($current_password) { $current_password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($current_password)) }
+       if ($otp) { [string]$otp = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($otp))}
+       if ($password) { [string]$password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
+       if ($current_password) { [string]$current_password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($current_password))}
        if ($otp) { $ObjParams | Add-Member -NotePropertyName otp -NotePropertyValue $otp }
 
         $JsonObject = New-Object psobject -property @{
@@ -22333,9 +22937,9 @@ must be part of the schema.
        if ($memberof) { $ObjParams | Add-Member -NotePropertyName memberof -NotePropertyValue $memberof }
        if ($targetgroup) { $ObjParams | Add-Member -NotePropertyName targetgroup -NotePropertyValue $targetgroup }
        if ($type) { $ObjParams | Add-Member -NotePropertyName type -NotePropertyValue $type }
+       if ($permissions) { $ObjParams | Add-Member -NotePropertyName permissions -NotePropertyValue $permissions }
        if ($filter) { $ObjParams | Add-Member -NotePropertyName filter -NotePropertyValue $filter }
        if ($subtree) { $ObjParams | Add-Member -NotePropertyName subtree -NotePropertyValue $subtree }
-       if ($permissions) { $ObjParams | Add-Member -NotePropertyName permissions -NotePropertyValue $permissions }
        if ($setattr) { $ObjParams | Add-Member -NotePropertyName setattr -NotePropertyValue $setattr }
        if ($addattr) { $ObjParams | Add-Member -NotePropertyName addattr -NotePropertyValue $addattr }
        if ($all.IsPresent) { $ObjParams | Add-Member -NotePropertyName all -NotePropertyValue $true }
@@ -22703,9 +23307,9 @@ function Invoke-FreeIPAAPIpermission_find {
        if ($memberof) { $ObjParams | Add-Member -NotePropertyName memberof -NotePropertyValue $memberof }
        if ($targetgroup) { $ObjParams | Add-Member -NotePropertyName targetgroup -NotePropertyValue $targetgroup }
        if ($type) { $ObjParams | Add-Member -NotePropertyName type -NotePropertyValue $type }
+       if ($permissions) { $ObjParams | Add-Member -NotePropertyName permissions -NotePropertyValue $permissions }
        if ($filter) { $ObjParams | Add-Member -NotePropertyName filter -NotePropertyValue $filter }
        if ($subtree) { $ObjParams | Add-Member -NotePropertyName subtree -NotePropertyValue $subtree }
-       if ($permissions) { $ObjParams | Add-Member -NotePropertyName permissions -NotePropertyValue $permissions }
        if ($timelimit) { $ObjParams | Add-Member -NotePropertyName timelimit -NotePropertyValue $timelimit }
        if ($sizelimit) { $ObjParams | Add-Member -NotePropertyName sizelimit -NotePropertyValue $sizelimit }
        if ($all.IsPresent) { $ObjParams | Add-Member -NotePropertyName all -NotePropertyValue $true }
@@ -22883,9 +23487,9 @@ last, after all sets and adds.
        if ($memberof) { $ObjParams | Add-Member -NotePropertyName memberof -NotePropertyValue $memberof }
        if ($targetgroup) { $ObjParams | Add-Member -NotePropertyName targetgroup -NotePropertyValue $targetgroup }
        if ($type) { $ObjParams | Add-Member -NotePropertyName type -NotePropertyValue $type }
+       if ($permissions) { $ObjParams | Add-Member -NotePropertyName permissions -NotePropertyValue $permissions }
        if ($filter) { $ObjParams | Add-Member -NotePropertyName filter -NotePropertyValue $filter }
        if ($subtree) { $ObjParams | Add-Member -NotePropertyName subtree -NotePropertyValue $subtree }
-       if ($permissions) { $ObjParams | Add-Member -NotePropertyName permissions -NotePropertyValue $permissions }
        if ($setattr) { $ObjParams | Add-Member -NotePropertyName setattr -NotePropertyValue $setattr }
        if ($addattr) { $ObjParams | Add-Member -NotePropertyName addattr -NotePropertyValue $addattr }
        if ($delattr) { $ObjParams | Add-Member -NotePropertyName delattr -NotePropertyValue $delattr }
@@ -23677,9 +24281,7 @@ last, after all sets and adds.
 function Invoke-FreeIPAAPIprivilege_remove_member {
         <#
             .DESCRIPTION
-       
-    Remove members from a privilege
-    
+       Remove members from a privilege
        .PARAMETER all
        Retrieve and print all attributes from the server. Affects command output.
        .PARAMETER raw
@@ -24432,7 +25034,7 @@ must be part of the schema.
                 [String]$desc,
                [parameter(Mandatory=$true)]
                     [ValidateNotNullOrEmpty()]
-                [String[]]$server,
+                [String]$server,
                [parameter(Mandatory=$true)]
                     [ValidateNotNullOrEmpty()]
                 [SecureString]$secret,
@@ -24476,7 +25078,7 @@ must be part of the schema.
                     version = $global:FreeIPAAPIServerConfig.ClientVersion
                 }
             }
-       if ($secret) { $secret = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret)) }
+       if ($secret) { [string]$secret = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret))}
        if ($desc) { $ObjParams | Add-Member -NotePropertyName description -NotePropertyValue $desc }
        if ($server) { $ObjParams | Add-Member -NotePropertyName ipatokenradiusserver -NotePropertyValue $server }
        if ($secret) { $ObjParams | Add-Member -NotePropertyName ipatokenradiussecret -NotePropertyValue $secret }
@@ -24594,7 +25196,7 @@ function Invoke-FreeIPAAPIradiusproxy_find {
                 [String]$desc,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
-                [String[]]$server,
+                [String]$server,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
                 [SecureString]$secret,
@@ -24641,7 +25243,7 @@ function Invoke-FreeIPAAPIradiusproxy_find {
                     version = $global:FreeIPAAPIServerConfig.ClientVersion
                 }
             }
-       if ($secret) { $secret = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret)) }
+       if ($secret) { [string]$secret = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret))}
        if ($name) { $ObjParams | Add-Member -NotePropertyName cn -NotePropertyValue $name }
        if ($desc) { $ObjParams | Add-Member -NotePropertyName description -NotePropertyValue $desc }
        if ($server) { $ObjParams | Add-Member -NotePropertyName ipatokenradiusserver -NotePropertyValue $server }
@@ -24713,7 +25315,7 @@ last, after all sets and adds.
                 [String]$desc,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
-                [String[]]$server,
+                [String]$server,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
                 [SecureString]$secret,
@@ -24766,7 +25368,7 @@ last, after all sets and adds.
                     version = $global:FreeIPAAPIServerConfig.ClientVersion
                 }
             }
-       if ($secret) { $secret = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret)) }
+       if ($secret) { [string]$secret = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secret))}
        if ($desc) { $ObjParams | Add-Member -NotePropertyName description -NotePropertyValue $desc }
        if ($server) { $ObjParams | Add-Member -NotePropertyName ipatokenradiusserver -NotePropertyValue $server }
        if ($secret) { $ObjParams | Add-Member -NotePropertyName ipatokenradiussecret -NotePropertyValue $secret }
@@ -25743,6 +26345,7 @@ function Invoke-FreeIPAAPIrole_show {
 function Invoke-FreeIPAAPIschema {
         <#
             .DESCRIPTION
+       Store and provide schema for commands and topics
        .PARAMETER known_fingerprints
        Fingerprint of schema cached by client
        .PARAMETER version
@@ -27321,6 +27924,8 @@ function Invoke-FreeIPAAPIserver_role_find {
        Time limit of search in seconds (0 is unlimited)
        .PARAMETER sizelimit
        Maximum number of entries returned (0 is unlimited)
+       .PARAMETER include_master
+       Include IPA master entries
        .PARAMETER all
        Retrieve and print all attributes from the server. Affects command output.
        .PARAMETER raw
@@ -27340,7 +27945,7 @@ function Invoke-FreeIPAAPIserver_role_find {
                     [ValidateNotNullOrEmpty()]
                 [String]$role,
                [parameter(Mandatory=$false)]
-                    [ValidateSet("enabled","configured","absent")]
+                    [ValidateSet("enabled","configured","hidden","absent")]
                 [String]$status,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -27348,6 +27953,9 @@ function Invoke-FreeIPAAPIserver_role_find {
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
                 [int]$sizelimit,
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$include_master,
                [parameter(Mandatory=$false)]
                     
                 [switch]$all,
@@ -27378,6 +27986,7 @@ function Invoke-FreeIPAAPIserver_role_find {
        if ($status) { $ObjParams | Add-Member -NotePropertyName status -NotePropertyValue $status }
        if ($timelimit) { $ObjParams | Add-Member -NotePropertyName timelimit -NotePropertyValue $timelimit }
        if ($sizelimit) { $ObjParams | Add-Member -NotePropertyName sizelimit -NotePropertyValue $sizelimit }
+       if ($include_master.IsPresent) { $ObjParams | Add-Member -NotePropertyName include_master -NotePropertyValue $true }
        if ($all.IsPresent) { $ObjParams | Add-Member -NotePropertyName all -NotePropertyValue $true }
        if ($raw.IsPresent) { $ObjParams | Add-Member -NotePropertyName raw -NotePropertyValue $true }
 
@@ -27513,6 +28122,56 @@ function Invoke-FreeIPAAPIserver_show {
         $JsonObject = New-Object psobject -property @{
                 id		= 0
                 method	= "server_show/1"
+                params  = @(@($name),$ObjParams)
+            }
+        if (!($FullResultsOutput.IsPresent)) {
+                (Invoke-FreeIPAAPI $JsonObject).result.result
+            } else {
+                Invoke-FreeIPAAPI $JsonObject
+            }
+    }
+}
+function Invoke-FreeIPAAPIserver_state {
+        <#
+            .DESCRIPTION
+       Set enabled/hidden state of a server.
+       .PARAMETER state
+       Server state
+       .PARAMETER version
+       Client version. Used to determine if server will accept request.
+       .PARAMETER name
+       IPA server hostname
+    #>
+    [CmdletBinding()]
+        [OutputType([psobject])]
+            Param(
+               [parameter(Mandatory=$true)]
+                    [ValidateSet("enabled","hidden")]
+                [String]$state,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$version,
+               [parameter(Mandatory=$true)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$name,
+               [parameter(Mandatory=$false)]
+                    [switch]$FullResultsOutput
+           )
+    process {
+        If ($version) {
+                $ObjParams = New-Object psobject -property @{
+                    version = $version
+                }
+            } else {
+                $ObjParams = New-Object psobject -property @{
+                    version = $global:FreeIPAAPIServerConfig.ClientVersion
+                }
+            }
+       if ($state) { $ObjParams | Add-Member -NotePropertyName state -NotePropertyValue $state }
+
+        $JsonObject = New-Object psobject -property @{
+                id		= 0
+                method	= "server_state/1"
                 params  = @(@($name),$ObjParams)
             }
         if (!($FullResultsOutput.IsPresent)) {
@@ -28469,7 +29128,7 @@ function Invoke-FreeIPAAPIservice_add {
        .PARAMETER pac_type
        Override default list of supported PAC types. Use 'NONE' to disable PAC support for this service, e.g. this might be necessary for NFS services.
        .PARAMETER auth_ind
-       Defines a whitelist for Authentication Indicators. Use 'otp' to allow OTP-based 2FA authentications. Use 'radius' to allow RADIUS-based 2FA authentications. Other values may be used for custom configurations.
+       Defines a whitelist for Authentication Indicators. Use 'otp' to allow OTP-based 2FA authentications. Use 'radius' to allow RADIUS-based 2FA authentications. Use 'pkinit' to allow PKINIT-based 2FA authentications. Use 'hardened' to allow brute-force hardened password authentication by SPAKE or FAST. With no indicator specified, all authentication mechanisms are allowed.
        .PARAMETER requires_pre_auth
        Pre-authentication is required for the service
        .PARAMETER ok_as_delegate
@@ -28483,7 +29142,9 @@ For multi-valued attributes, the command replaces the values already present.
        Add an attribute/value pair. Format is attr=value. The attribute
 must be part of the schema.
        .PARAMETER force
-       force principal name even if not in DNS
+       force principal name even if host not in DNS
+       .PARAMETER skip_host_check
+       force service to be created even when host object does not exist to manage it
        .PARAMETER all
        Retrieve and print all attributes from the server. Affects command output.
        .PARAMETER raw
@@ -28505,7 +29166,7 @@ must be part of the schema.
                     [ValidateSet("MS-PAC","PAD","NONE")]
                 [String[]]$pac_type,
                [parameter(Mandatory=$false)]
-                    [ValidateNotNullOrEmpty()]
+                    [ValidateSet("radius","otp","pkinit","hardened")]
                 [String[]]$auth_ind,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -28525,6 +29186,9 @@ must be part of the schema.
                [parameter(Mandatory=$false)]
                     
                 [switch]$force,
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$skip_host_check,
                [parameter(Mandatory=$false)]
                     
                 [switch]$all,
@@ -28562,6 +29226,7 @@ must be part of the schema.
        if ($setattr) { $ObjParams | Add-Member -NotePropertyName setattr -NotePropertyValue $setattr }
        if ($addattr) { $ObjParams | Add-Member -NotePropertyName addattr -NotePropertyValue $addattr }
        if ($force.IsPresent) { $ObjParams | Add-Member -NotePropertyName force -NotePropertyValue $true }
+       if ($skip_host_check.IsPresent) { $ObjParams | Add-Member -NotePropertyName skip_host_check -NotePropertyValue $true }
        if ($all.IsPresent) { $ObjParams | Add-Member -NotePropertyName all -NotePropertyValue $true }
        if ($raw.IsPresent) { $ObjParams | Add-Member -NotePropertyName raw -NotePropertyValue $true }
 
@@ -28773,6 +29438,105 @@ function Invoke-FreeIPAAPIservice_add_principal {
                 id		= 0
                 method	= "service_add_principal/1"
                 params  = @(@($canonical_principal,$principal),$ObjParams)
+            }
+        if (!($FullResultsOutput.IsPresent)) {
+                (Invoke-FreeIPAAPI $JsonObject).result.result
+            } else {
+                Invoke-FreeIPAAPI $JsonObject
+            }
+    }
+}
+function Invoke-FreeIPAAPIservice_add_smb {
+        <#
+            .DESCRIPTION
+       Add a new SMB service.
+       .PARAMETER setattr
+       Set an attribute to a name/value pair. Format is attr=value.
+For multi-valued attributes, the command replaces the values already present.
+       .PARAMETER addattr
+       Add an attribute/value pair. Format is attr=value. The attribute
+must be part of the schema.
+       .PARAMETER certificate
+       Base-64 encoded service certificate
+       .PARAMETER ok_as_delegate
+       Client credentials may be delegated to the service
+       .PARAMETER ok_to_auth_as_delegate
+       The service is allowed to authenticate on behalf of a client
+       .PARAMETER all
+       Retrieve and print all attributes from the server. Affects command output.
+       .PARAMETER raw
+       Print entries as stored on the server. Only affects output format.
+       .PARAMETER version
+       Client version. Used to determine if server will accept request.
+       .PARAMETER no_members
+       Suppress processing of membership attributes.
+       .PARAMETER hostname
+       Host name
+       .PARAMETER netbiosname
+       SMB service NetBIOS name
+    #>
+    [CmdletBinding()]
+        [OutputType([psobject])]
+            Param(
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String[]]$setattr,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String[]]$addattr,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String[]]$certificate,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [switch]$ok_as_delegate,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [switch]$ok_to_auth_as_delegate,
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$all,
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$raw,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$version,
+               [parameter(Mandatory=$false)]
+                    
+                [switch]$no_members,
+               [parameter(Mandatory=$true)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$hostname,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$netbiosname,
+               [parameter(Mandatory=$false)]
+                    [switch]$FullResultsOutput
+           )
+    process {
+        If ($version) {
+                $ObjParams = New-Object psobject -property @{
+                    version = $version
+                }
+            } else {
+                $ObjParams = New-Object psobject -property @{
+                    version = $global:FreeIPAAPIServerConfig.ClientVersion
+                }
+            }
+       if ($setattr) { $ObjParams | Add-Member -NotePropertyName setattr -NotePropertyValue $setattr }
+       if ($addattr) { $ObjParams | Add-Member -NotePropertyName addattr -NotePropertyValue $addattr }
+       if ($certificate) { $ObjParams | Add-Member -NotePropertyName usercertificate -NotePropertyValue $certificate }
+       if ($ok_as_delegate.IsPresent) { $ObjParams | Add-Member -NotePropertyName ipakrbokasdelegate -NotePropertyValue $true }
+       if ($ok_to_auth_as_delegate.IsPresent) { $ObjParams | Add-Member -NotePropertyName ipakrboktoauthasdelegate -NotePropertyValue $true }
+       if ($all.IsPresent) { $ObjParams | Add-Member -NotePropertyName all -NotePropertyValue $true }
+       if ($raw.IsPresent) { $ObjParams | Add-Member -NotePropertyName raw -NotePropertyValue $true }
+
+       if ($no_members.IsPresent) { $ObjParams | Add-Member -NotePropertyName no_members -NotePropertyValue $true }
+        $JsonObject = New-Object psobject -property @{
+                id		= 0
+                method	= "service_add_smb/1"
+                params  = @(@($hostname,$netbiosname),$ObjParams)
             }
         if (!($FullResultsOutput.IsPresent)) {
                 (Invoke-FreeIPAAPI $JsonObject).result.result
@@ -29230,7 +29994,7 @@ function Invoke-FreeIPAAPIservice_find {
        .PARAMETER pac_type
        Override default list of supported PAC types. Use 'NONE' to disable PAC support for this service, e.g. this might be necessary for NFS services.
        .PARAMETER auth_ind
-       Defines a whitelist for Authentication Indicators. Use 'otp' to allow OTP-based 2FA authentications. Use 'radius' to allow RADIUS-based 2FA authentications. Other values may be used for custom configurations.
+       Defines a whitelist for Authentication Indicators. Use 'otp' to allow OTP-based 2FA authentications. Use 'radius' to allow RADIUS-based 2FA authentications. Use 'pkinit' to allow PKINIT-based 2FA authentications. Use 'hardened' to allow brute-force hardened password authentication by SPAKE or FAST. With no indicator specified, all authentication mechanisms are allowed.
        .PARAMETER timelimit
        Time limit of search in seconds (0 is unlimited)
        .PARAMETER sizelimit
@@ -29265,7 +30029,7 @@ function Invoke-FreeIPAAPIservice_find {
                     [ValidateSet("MS-PAC","PAD","NONE")]
                 [String[]]$pac_type,
                [parameter(Mandatory=$false)]
-                    [ValidateNotNullOrEmpty()]
+                    [ValidateSet("radius","otp","pkinit","hardened")]
                 [String[]]$auth_ind,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -29346,7 +30110,7 @@ function Invoke-FreeIPAAPIservice_mod {
        .PARAMETER pac_type
        Override default list of supported PAC types. Use 'NONE' to disable PAC support for this service, e.g. this might be necessary for NFS services.
        .PARAMETER auth_ind
-       Defines a whitelist for Authentication Indicators. Use 'otp' to allow OTP-based 2FA authentications. Use 'radius' to allow RADIUS-based 2FA authentications. Other values may be used for custom configurations.
+       Defines a whitelist for Authentication Indicators. Use 'otp' to allow OTP-based 2FA authentications. Use 'radius' to allow RADIUS-based 2FA authentications. Use 'pkinit' to allow PKINIT-based 2FA authentications. Use 'hardened' to allow brute-force hardened password authentication by SPAKE or FAST. With no indicator specified, all authentication mechanisms are allowed.
        .PARAMETER requires_pre_auth
        Pre-authentication is required for the service
        .PARAMETER ok_as_delegate
@@ -29388,7 +30152,7 @@ last, after all sets and adds.
                     [ValidateSet("MS-PAC","PAD","NONE")]
                 [String[]]$pac_type,
                [parameter(Mandatory=$false)]
-                    [ValidateNotNullOrEmpty()]
+                    [ValidateSet("radius","otp","pkinit","hardened")]
                 [String[]]$auth_ind,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -29746,9 +30510,7 @@ function Invoke-FreeIPAAPIservice_show {
 function Invoke-FreeIPAAPIsession_logout {
         <#
             .DESCRIPTION
-       
-    RPC command used to log the current user out of their session.
-    
+       RPC command used to log the current user out of their session.
        .PARAMETER version
        Client version. Used to determine if server will accept request.
     #>
@@ -29854,7 +30616,7 @@ function Invoke-FreeIPAAPIstageuser_activate {
                     
                 [switch]$no_members,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -30073,7 +30835,7 @@ must be part of the schema.
                     [ValidateNotNullOrEmpty()]
                 [String[]]$sshpubkey,
                [parameter(Mandatory=$false)]
-                    [ValidateSet("password","radius","otp")]
+                    [ValidateSet("password","radius","otp","pkinit","hardened")]
                 [String[]]$user_auth_type,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -30118,7 +30880,7 @@ must be part of the schema.
                     
                 [switch]$no_members,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -30133,7 +30895,7 @@ must be part of the schema.
                     version = $global:FreeIPAAPIServerConfig.ClientVersion
                 }
             }
-       if ($password) { $password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
+       if ($password) { [string]$password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
        if ($first) { $ObjParams | Add-Member -NotePropertyName givenname -NotePropertyValue $first }
        if ($last) { $ObjParams | Add-Member -NotePropertyName sn -NotePropertyValue $last }
        if ($cn) { $ObjParams | Add-Member -NotePropertyName cn -NotePropertyValue $cn }
@@ -30227,7 +30989,7 @@ function Invoke-FreeIPAAPIstageuser_add_cert {
                     [ValidateNotNullOrEmpty()]
                 [String[]]$certificate,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -30307,7 +31069,7 @@ function Invoke-FreeIPAAPIstageuser_add_certmapdata {
                     
                 [switch]$no_members,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -30380,7 +31142,7 @@ function Invoke-FreeIPAAPIstageuser_add_manager {
                     [ValidateNotNullOrEmpty()]
                 [String[]]$users,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -30445,7 +31207,7 @@ function Invoke-FreeIPAAPIstageuser_add_principal {
                     
                 [switch]$no_members,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$true)]
                     [ValidateNotNullOrEmpty()]
@@ -30500,7 +31262,7 @@ function Invoke-FreeIPAAPIstageuser_del {
                     [ValidateNotNullOrEmpty()]
                 [String]$version,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -30607,6 +31369,14 @@ function Invoke-FreeIPAAPIstageuser_find {
        Preferred Language
        .PARAMETER certificate
        Base-64 encoded user certificate
+       .PARAMETER smb_logon_script
+       SMB logon script path
+       .PARAMETER smb_profile_path
+       SMB profile path
+       .PARAMETER smb_home_dir
+       SMB Home Directory
+       .PARAMETER smb_home_drive
+       SMB Home Directory Drive
        .PARAMETER timelimit
        Time limit of search in seconds (0 is unlimited)
        .PARAMETER sizelimit
@@ -30648,7 +31418,7 @@ function Invoke-FreeIPAAPIstageuser_find {
         [OutputType([psobject])]
             Param(
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -30732,7 +31502,7 @@ function Invoke-FreeIPAAPIstageuser_find {
                     [ValidateNotNullOrEmpty()]
                 [String[]]$carlicense,
                [parameter(Mandatory=$false)]
-                    [ValidateSet("password","radius","otp")]
+                    [ValidateSet("password","radius","otp","pkinit","hardened")]
                 [String[]]$user_auth_type,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -30760,6 +31530,18 @@ function Invoke-FreeIPAAPIstageuser_find {
                 [String[]]$certificate,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
+                [String]$smb_logon_script,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$smb_profile_path,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$smb_home_dir,
+               [parameter(Mandatory=$false)]
+                    [ValidateSet("A:","B:","C:","D:","E:","F:","G:","H:","I:","J:","K:","L:","M:","N:","O:","P:","Q:","R:","S:","T:","U:","V:","W:","X:","Y:","Z:")]
+                [String]$smb_home_drive,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
                 [int]$timelimit,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -30780,10 +31562,10 @@ function Invoke-FreeIPAAPIstageuser_find {
                     
                 [switch]$pkey_only,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$in_groups,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$not_in_groups,
                [parameter(Mandatory=$false)]
                     [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*$")]
@@ -30825,7 +31607,7 @@ function Invoke-FreeIPAAPIstageuser_find {
                     version = $global:FreeIPAAPIServerConfig.ClientVersion
                 }
             }
-       if ($password) { $password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
+       if ($password) { [string]$password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
        if ($login) { $ObjParams | Add-Member -NotePropertyName uid -NotePropertyValue $login }
        if ($first) { $ObjParams | Add-Member -NotePropertyName givenname -NotePropertyValue $first }
        if ($last) { $ObjParams | Add-Member -NotePropertyName sn -NotePropertyValue $last }
@@ -30863,6 +31645,10 @@ function Invoke-FreeIPAAPIstageuser_find {
        if ($employeetype) { $ObjParams | Add-Member -NotePropertyName employeetype -NotePropertyValue $employeetype }
        if ($preferredlanguage) { $ObjParams | Add-Member -NotePropertyName preferredlanguage -NotePropertyValue $preferredlanguage }
        if ($certificate) { $ObjParams | Add-Member -NotePropertyName usercertificate -NotePropertyValue $certificate }
+       if ($smb_logon_script) { $ObjParams | Add-Member -NotePropertyName ipantlogonscript -NotePropertyValue $smb_logon_script }
+       if ($smb_profile_path) { $ObjParams | Add-Member -NotePropertyName ipantprofilepath -NotePropertyValue $smb_profile_path }
+       if ($smb_home_dir) { $ObjParams | Add-Member -NotePropertyName ipanthomedirectory -NotePropertyValue $smb_home_dir }
+       if ($smb_home_drive) { $ObjParams | Add-Member -NotePropertyName ipanthomedirectoryrive -NotePropertyValue $smb_home_drive }
        if ($timelimit) { $ObjParams | Add-Member -NotePropertyName timelimit -NotePropertyValue $timelimit }
        if ($sizelimit) { $ObjParams | Add-Member -NotePropertyName sizelimit -NotePropertyValue $sizelimit }
        if ($all.IsPresent) { $ObjParams | Add-Member -NotePropertyName all -NotePropertyValue $true }
@@ -30972,6 +31758,14 @@ function Invoke-FreeIPAAPIstageuser_mod {
        Preferred Language
        .PARAMETER certificate
        Base-64 encoded user certificate
+       .PARAMETER smb_logon_script
+       SMB logon script path
+       .PARAMETER smb_profile_path
+       SMB profile path
+       .PARAMETER smb_home_dir
+       SMB Home Directory
+       .PARAMETER smb_home_drive
+       SMB Home Directory Drive
        .PARAMETER setattr
        Set an attribute to a name/value pair. Format is attr=value.
 For multi-valued attributes, the command replaces the values already present.
@@ -31087,7 +31881,7 @@ last, after all sets and adds.
                     [ValidateNotNullOrEmpty()]
                 [String[]]$sshpubkey,
                [parameter(Mandatory=$false)]
-                    [ValidateSet("password","radius","otp")]
+                    [ValidateSet("password","radius","otp","pkinit","hardened")]
                 [String[]]$user_auth_type,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -31115,6 +31909,18 @@ last, after all sets and adds.
                 [String[]]$certificate,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
+                [String]$smb_logon_script,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$smb_profile_path,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$smb_home_dir,
+               [parameter(Mandatory=$false)]
+                    [ValidateSet("A:","B:","C:","D:","E:","F:","G:","H:","I:","J:","K:","L:","M:","N:","O:","P:","Q:","R:","S:","T:","U:","V:","W:","X:","Y:","Z:")]
+                [String]$smb_home_drive,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
                 [String[]]$setattr,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -31138,10 +31944,10 @@ last, after all sets and adds.
                     
                 [switch]$no_members,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$rename,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -31156,7 +31962,7 @@ last, after all sets and adds.
                     version = $global:FreeIPAAPIServerConfig.ClientVersion
                 }
             }
-       if ($password) { $password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
+       if ($password) { [string]$password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
        if ($first) { $ObjParams | Add-Member -NotePropertyName givenname -NotePropertyValue $first }
        if ($last) { $ObjParams | Add-Member -NotePropertyName sn -NotePropertyValue $last }
        if ($cn) { $ObjParams | Add-Member -NotePropertyName cn -NotePropertyValue $cn }
@@ -31195,6 +32001,10 @@ last, after all sets and adds.
        if ($employeetype) { $ObjParams | Add-Member -NotePropertyName employeetype -NotePropertyValue $employeetype }
        if ($preferredlanguage) { $ObjParams | Add-Member -NotePropertyName preferredlanguage -NotePropertyValue $preferredlanguage }
        if ($certificate) { $ObjParams | Add-Member -NotePropertyName usercertificate -NotePropertyValue $certificate }
+       if ($smb_logon_script) { $ObjParams | Add-Member -NotePropertyName ipantlogonscript -NotePropertyValue $smb_logon_script }
+       if ($smb_profile_path) { $ObjParams | Add-Member -NotePropertyName ipantprofilepath -NotePropertyValue $smb_profile_path }
+       if ($smb_home_dir) { $ObjParams | Add-Member -NotePropertyName ipanthomedirectory -NotePropertyValue $smb_home_dir }
+       if ($smb_home_drive) { $ObjParams | Add-Member -NotePropertyName ipanthomedirectoryrive -NotePropertyValue $smb_home_drive }
        if ($setattr) { $ObjParams | Add-Member -NotePropertyName setattr -NotePropertyValue $setattr }
        if ($addattr) { $ObjParams | Add-Member -NotePropertyName addattr -NotePropertyValue $addattr }
        if ($delattr) { $ObjParams | Add-Member -NotePropertyName delattr -NotePropertyValue $delattr }
@@ -31252,7 +32062,7 @@ function Invoke-FreeIPAAPIstageuser_remove_cert {
                     [ValidateNotNullOrEmpty()]
                 [String[]]$certificate,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -31332,7 +32142,7 @@ function Invoke-FreeIPAAPIstageuser_remove_certmapdata {
                     
                 [switch]$no_members,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -31405,7 +32215,7 @@ function Invoke-FreeIPAAPIstageuser_remove_manager {
                     [ValidateNotNullOrEmpty()]
                 [String[]]$users,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -31470,7 +32280,7 @@ function Invoke-FreeIPAAPIstageuser_remove_principal {
                     
                 [switch]$no_members,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$true)]
                     [ValidateNotNullOrEmpty()]
@@ -31540,7 +32350,7 @@ function Invoke-FreeIPAAPIstageuser_show {
                     
                 [switch]$no_members,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -35925,7 +36735,7 @@ must be part of the schema.
        .PARAMETER range_size
        Size of the ID range reserved for the trusted domain
        .PARAMETER range_type
-       Type of trusted domain ID range, one of ipa-ad-trust, ipa-ad-trust-posix
+       Type of trusted domain ID range, one of allowed values
        .PARAMETER two_way
        Establish bi-directional trust. By default trust is inbound one-way only.
        .PARAMETER external
@@ -36003,8 +36813,8 @@ must be part of the schema.
                     version = $global:FreeIPAAPIServerConfig.ClientVersion
                 }
             }
-       if ($password) { $password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
-       if ($trust_secret) { $trust_secret = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($trust_secret)) }
+       if ($password) { [string]$password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
+       if ($trust_secret) { [string]$trust_secret = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($trust_secret))}
        if ($setattr) { $ObjParams | Add-Member -NotePropertyName setattr -NotePropertyValue $setattr }
        if ($addattr) { $ObjParams | Add-Member -NotePropertyName addattr -NotePropertyValue $addattr }
        if ($type) { $ObjParams | Add-Member -NotePropertyName trust_type -NotePropertyValue $type }
@@ -36088,6 +36898,10 @@ function Invoke-FreeIPAAPItrust_fetch_domains {
        Refresh list of the domains associated with the trust
        .PARAMETER rights
        Display the access rights of this entry (requires -all). See ipa man page for details.
+       .PARAMETER admin
+       Active Directory domain administrator
+       .PARAMETER password
+       Active Directory domain administrator's password
        .PARAMETER server
        Domain controller for the Active Directory domain (optional)
        .PARAMETER all
@@ -36105,6 +36919,12 @@ function Invoke-FreeIPAAPItrust_fetch_domains {
                [parameter(Mandatory=$false)]
                     
                 [switch]$rights,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$admin,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [SecureString]$password,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
                 [String]$server,
@@ -36133,7 +36953,10 @@ function Invoke-FreeIPAAPItrust_fetch_domains {
                     version = $global:FreeIPAAPIServerConfig.ClientVersion
                 }
             }
+       if ($password) { [string]$password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
        if ($rights.IsPresent) { $ObjParams | Add-Member -NotePropertyName rights -NotePropertyValue $true }
+       if ($admin) { $ObjParams | Add-Member -NotePropertyName realm_admin -NotePropertyValue $admin }
+       if ($password) { $ObjParams | Add-Member -NotePropertyName realm_passwd -NotePropertyValue $password }
        if ($server) { $ObjParams | Add-Member -NotePropertyName realm_server -NotePropertyValue $server }
        if ($all.IsPresent) { $ObjParams | Add-Member -NotePropertyName all -NotePropertyValue $true }
        if ($raw.IsPresent) { $ObjParams | Add-Member -NotePropertyName raw -NotePropertyValue $true }
@@ -36671,7 +37494,7 @@ must be part of the schema.
                     [ValidateNotNullOrEmpty()]
                 [String[]]$sshpubkey,
                [parameter(Mandatory=$false)]
-                    [ValidateSet("password","radius","otp")]
+                    [ValidateSet("password","radius","otp","pkinit","hardened")]
                 [String[]]$user_auth_type,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -36722,7 +37545,7 @@ must be part of the schema.
                     
                 [switch]$no_members,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -36737,7 +37560,7 @@ must be part of the schema.
                     version = $global:FreeIPAAPIServerConfig.ClientVersion
                 }
             }
-       if ($password) { $password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
+       if ($password) { [string]$password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
        if ($first) { $ObjParams | Add-Member -NotePropertyName givenname -NotePropertyValue $first }
        if ($last) { $ObjParams | Add-Member -NotePropertyName sn -NotePropertyValue $last }
        if ($cn) { $ObjParams | Add-Member -NotePropertyName cn -NotePropertyValue $cn }
@@ -36832,7 +37655,7 @@ function Invoke-FreeIPAAPIuser_add_cert {
                     [ValidateNotNullOrEmpty()]
                 [String[]]$certificate,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -36912,7 +37735,7 @@ function Invoke-FreeIPAAPIuser_add_certmapdata {
                     
                 [switch]$no_members,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -36985,7 +37808,7 @@ function Invoke-FreeIPAAPIuser_add_manager {
                     [ValidateNotNullOrEmpty()]
                 [String[]]$users,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -37050,7 +37873,7 @@ function Invoke-FreeIPAAPIuser_add_principal {
                     
                 [switch]$no_members,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$true)]
                     [ValidateNotNullOrEmpty()]
@@ -37110,7 +37933,7 @@ function Invoke-FreeIPAAPIuser_del {
                     [ValidateNotNullOrEmpty()]
                 [String]$version,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -37156,7 +37979,7 @@ function Invoke-FreeIPAAPIuser_disable {
                     [ValidateNotNullOrEmpty()]
                 [String]$version,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -37200,7 +38023,7 @@ function Invoke-FreeIPAAPIuser_enable {
                     [ValidateNotNullOrEmpty()]
                 [String]$version,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -37306,6 +38129,14 @@ function Invoke-FreeIPAAPIuser_find {
        Preferred Language
        .PARAMETER certificate
        Base-64 encoded user certificate
+       .PARAMETER smb_logon_script
+       SMB logon script path
+       .PARAMETER smb_profile_path
+       SMB profile path
+       .PARAMETER smb_home_dir
+       SMB Home Directory
+       .PARAMETER smb_home_drive
+       SMB Home Directory Drive
        .PARAMETER disabled
        Account disabled
        .PARAMETER preserved
@@ -37353,7 +38184,7 @@ function Invoke-FreeIPAAPIuser_find {
         [OutputType([psobject])]
             Param(
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -37437,7 +38268,7 @@ function Invoke-FreeIPAAPIuser_find {
                     [ValidateNotNullOrEmpty()]
                 [String[]]$carlicense,
                [parameter(Mandatory=$false)]
-                    [ValidateSet("password","radius","otp")]
+                    [ValidateSet("password","radius","otp","pkinit","hardened")]
                 [String[]]$user_auth_type,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -37463,6 +38294,18 @@ function Invoke-FreeIPAAPIuser_find {
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
                 [String[]]$certificate,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$smb_logon_script,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$smb_profile_path,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$smb_home_dir,
+               [parameter(Mandatory=$false)]
+                    [ValidateSet("A:","B:","C:","D:","E:","F:","G:","H:","I:","J:","K:","L:","M:","N:","O:","P:","Q:","R:","S:","T:","U:","V:","W:","X:","Y:","Z:")]
+                [String]$smb_home_drive,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
                 [switch]$disabled,
@@ -37494,10 +38337,10 @@ function Invoke-FreeIPAAPIuser_find {
                     
                 [switch]$pkey_only,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$in_groups,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$not_in_groups,
                [parameter(Mandatory=$false)]
                     [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*$")]
@@ -37539,7 +38382,7 @@ function Invoke-FreeIPAAPIuser_find {
                     version = $global:FreeIPAAPIServerConfig.ClientVersion
                 }
             }
-       if ($password) { $password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
+       if ($password) { [string]$password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
        if ($login) { $ObjParams | Add-Member -NotePropertyName uid -NotePropertyValue $login }
        if ($first) { $ObjParams | Add-Member -NotePropertyName givenname -NotePropertyValue $first }
        if ($last) { $ObjParams | Add-Member -NotePropertyName sn -NotePropertyValue $last }
@@ -37577,6 +38420,10 @@ function Invoke-FreeIPAAPIuser_find {
        if ($employeetype) { $ObjParams | Add-Member -NotePropertyName employeetype -NotePropertyValue $employeetype }
        if ($preferredlanguage) { $ObjParams | Add-Member -NotePropertyName preferredlanguage -NotePropertyValue $preferredlanguage }
        if ($certificate) { $ObjParams | Add-Member -NotePropertyName usercertificate -NotePropertyValue $certificate }
+       if ($smb_logon_script) { $ObjParams | Add-Member -NotePropertyName ipantlogonscript -NotePropertyValue $smb_logon_script }
+       if ($smb_profile_path) { $ObjParams | Add-Member -NotePropertyName ipantprofilepath -NotePropertyValue $smb_profile_path }
+       if ($smb_home_dir) { $ObjParams | Add-Member -NotePropertyName ipanthomedirectory -NotePropertyValue $smb_home_dir }
+       if ($smb_home_drive) { $ObjParams | Add-Member -NotePropertyName ipanthomedirectoryrive -NotePropertyValue $smb_home_drive }
        if ($disabled.IsPresent) { $ObjParams | Add-Member -NotePropertyName nsaccountlock -NotePropertyValue $true }
        if ($preserved.IsPresent) { $ObjParams | Add-Member -NotePropertyName preserved -NotePropertyValue $true }
        if ($timelimit) { $ObjParams | Add-Member -NotePropertyName timelimit -NotePropertyValue $timelimit }
@@ -37689,6 +38536,14 @@ function Invoke-FreeIPAAPIuser_mod {
        Preferred Language
        .PARAMETER certificate
        Base-64 encoded user certificate
+       .PARAMETER smb_logon_script
+       SMB logon script path
+       .PARAMETER smb_profile_path
+       SMB profile path
+       .PARAMETER smb_home_dir
+       SMB Home Directory
+       .PARAMETER smb_home_drive
+       SMB Home Directory Drive
        .PARAMETER disabled
        Account disabled
        .PARAMETER setattr
@@ -37806,7 +38661,7 @@ last, after all sets and adds.
                     [ValidateNotNullOrEmpty()]
                 [String[]]$sshpubkey,
                [parameter(Mandatory=$false)]
-                    [ValidateSet("password","radius","otp")]
+                    [ValidateSet("password","radius","otp","pkinit","hardened")]
                 [String[]]$user_auth_type,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -37832,6 +38687,18 @@ last, after all sets and adds.
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
                 [String[]]$certificate,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$smb_logon_script,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$smb_profile_path,
+               [parameter(Mandatory=$false)]
+                    [ValidateNotNullOrEmpty()]
+                [String]$smb_home_dir,
+               [parameter(Mandatory=$false)]
+                    [ValidateSet("A:","B:","C:","D:","E:","F:","G:","H:","I:","J:","K:","L:","M:","N:","O:","P:","Q:","R:","S:","T:","U:","V:","W:","X:","Y:","Z:")]
+                [String]$smb_home_drive,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
                 [switch]$disabled,
@@ -37860,10 +38727,10 @@ last, after all sets and adds.
                     
                 [switch]$no_members,
                [parameter(Mandatory=$false)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$rename,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -37878,7 +38745,7 @@ last, after all sets and adds.
                     version = $global:FreeIPAAPIServerConfig.ClientVersion
                 }
             }
-       if ($password) { $password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)) }
+       if ($password) { [string]$password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))}
        if ($first) { $ObjParams | Add-Member -NotePropertyName givenname -NotePropertyValue $first }
        if ($last) { $ObjParams | Add-Member -NotePropertyName sn -NotePropertyValue $last }
        if ($cn) { $ObjParams | Add-Member -NotePropertyName cn -NotePropertyValue $cn }
@@ -37917,6 +38784,10 @@ last, after all sets and adds.
        if ($employeetype) { $ObjParams | Add-Member -NotePropertyName employeetype -NotePropertyValue $employeetype }
        if ($preferredlanguage) { $ObjParams | Add-Member -NotePropertyName preferredlanguage -NotePropertyValue $preferredlanguage }
        if ($certificate) { $ObjParams | Add-Member -NotePropertyName usercertificate -NotePropertyValue $certificate }
+       if ($smb_logon_script) { $ObjParams | Add-Member -NotePropertyName ipantlogonscript -NotePropertyValue $smb_logon_script }
+       if ($smb_profile_path) { $ObjParams | Add-Member -NotePropertyName ipantprofilepath -NotePropertyValue $smb_profile_path }
+       if ($smb_home_dir) { $ObjParams | Add-Member -NotePropertyName ipanthomedirectory -NotePropertyValue $smb_home_dir }
+       if ($smb_home_drive) { $ObjParams | Add-Member -NotePropertyName ipanthomedirectoryrive -NotePropertyValue $smb_home_drive }
        if ($disabled.IsPresent) { $ObjParams | Add-Member -NotePropertyName nsaccountlock -NotePropertyValue $true }
        if ($setattr) { $ObjParams | Add-Member -NotePropertyName setattr -NotePropertyValue $setattr }
        if ($addattr) { $ObjParams | Add-Member -NotePropertyName addattr -NotePropertyValue $addattr }
@@ -37975,7 +38846,7 @@ function Invoke-FreeIPAAPIuser_remove_cert {
                     [ValidateNotNullOrEmpty()]
                 [String[]]$certificate,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -38055,7 +38926,7 @@ function Invoke-FreeIPAAPIuser_remove_certmapdata {
                     
                 [switch]$no_members,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [ValidateNotNullOrEmpty()]
@@ -38128,7 +38999,7 @@ function Invoke-FreeIPAAPIuser_remove_manager {
                     [ValidateNotNullOrEmpty()]
                 [String[]]$users,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -38193,7 +39064,7 @@ function Invoke-FreeIPAAPIuser_remove_principal {
                     
                 [switch]$no_members,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$true)]
                     [ValidateNotNullOrEmpty()]
@@ -38268,7 +39139,7 @@ function Invoke-FreeIPAAPIuser_show {
                     
                 [switch]$no_members,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -38322,7 +39193,7 @@ function Invoke-FreeIPAAPIuser_stage {
                     [ValidateNotNullOrEmpty()]
                 [String]$version,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String[]]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -38397,7 +39268,7 @@ function Invoke-FreeIPAAPIuser_status {
                     [ValidateNotNullOrEmpty()]
                 [String]$version,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -38443,7 +39314,7 @@ function Invoke-FreeIPAAPIuser_undel {
                     [ValidateNotNullOrEmpty()]
                 [String]$version,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -38493,7 +39364,7 @@ function Invoke-FreeIPAAPIuser_unlock {
                     [ValidateNotNullOrEmpty()]
                 [String]$version,
                [parameter(Mandatory=$true)]
-                    [ValidatePattern("^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
+                    [ValidatePattern("(?!^[0-9]+$)^[a-zA-Z0-9_.][a-zA-Z0-9_.-]*[a-zA-Z0-9_.$-]?$")]
                 [String]$login,
                [parameter(Mandatory=$false)]
                     [switch]$FullResultsOutput
@@ -38911,6 +39782,7 @@ function Invoke-FreeIPAAPIvaultcontainer_show {
 function Invoke-FreeIPAAPIvault_add_internal {
         <#
             .DESCRIPTION
+       Add a vault.
        .PARAMETER desc
        Vault description
        .PARAMETER type
@@ -39224,6 +40096,7 @@ function Invoke-FreeIPAAPIvault_add_owner {
 function Invoke-FreeIPAAPIvault_archive_internal {
         <#
             .DESCRIPTION
+       Archive data into a vault.
        .PARAMETER service
        Service name of the service vault
        .PARAMETER shared
@@ -39511,6 +40384,7 @@ function Invoke-FreeIPAAPIvault_find {
 function Invoke-FreeIPAAPIvault_mod_internal {
         <#
             .DESCRIPTION
+       Modify a vault.
        .PARAMETER desc
        Vault description
        .PARAMETER type
@@ -39837,6 +40711,7 @@ function Invoke-FreeIPAAPIvault_remove_owner {
 function Invoke-FreeIPAAPIvault_retrieve_internal {
         <#
             .DESCRIPTION
+       Retrieve data from a vault.
        .PARAMETER service
        Service name of the service vault
        .PARAMETER shared
@@ -40038,24 +40913,66 @@ function Invoke-FreeIPAAPIwhoami {
             }
     }
 }
-New-alias -Name Add-IPAAci -Value Invoke-FreeIPAAPIAci_Add -Description "    Create new ACI."
-New-alias -Name Remove-IPAAci -Value Invoke-FreeIPAAPIAci_Del -Description "    Delete ACI."
-New-alias -Name Find-IPAAci -Value Invoke-FreeIPAAPIAci_Find -Description "    Search for ACIs."
-New-alias -Name Set-IPAAci -Value Invoke-FreeIPAAPIAci_Mod -Description "    Modify ACI."
-New-alias -Name Rename-IPAAci -Value Invoke-FreeIPAAPIAci_Rename -Description "    Rename an ACI."
-New-alias -Name Show-IPAAci -Value Invoke-FreeIPAAPIAci_Show -Description "    Display a single ACI given an ACI name."
+New-alias -Name Add-IPAAci -Value Invoke-FreeIPAAPIAci_Add -Description "Create new ACI."
+New-alias -Name Remove-IPAAci -Value Invoke-FreeIPAAPIAci_Del -Description "Delete ACI."
+New-alias -Name Find-IPAAci -Value Invoke-FreeIPAAPIAci_Find -Description "
+Search for ACIs.
+
+    Returns a list of ACIs
+
+    EXAMPLES:
+
+     To find all ACIs that apply directly to members of the group ipausers:
+       ipa aci-find --memberof=ipausers
+
+     To find all ACIs that grant add access:
+       ipa aci-find --permissions=add
+
+    Note that the find command only looks for the given text in the set of
+    ACIs, it does not evaluate the ACIs to see if something would apply.
+    For example, searching on memberof=ipausers will find all ACIs that
+    have ipausers as a memberof. There may be other ACIs that apply to
+    members of that group indirectly.
+    "
+New-alias -Name Set-IPAAci -Value Invoke-FreeIPAAPIAci_Mod -Description "Modify ACI."
+New-alias -Name Rename-IPAAci -Value Invoke-FreeIPAAPIAci_Rename -Description "Rename an ACI."
+New-alias -Name Show-IPAAci -Value Invoke-FreeIPAAPIAci_Show -Description "Display a single ACI given an ACI name."
 New-alias -Name Test-IPAAdtrustEnabled -Value Invoke-FreeIPAAPIAdtrust_Is_Enabled -Description "Determine whether ipa-adtrust-install has been run on this system"
-New-alias -Name Add-IPAAutomember -Value Invoke-FreeIPAAPIAutomember_Add -Description "    Add an automember rule."
-New-alias -Name Add-IPAAutomemberCondition -Value Invoke-FreeIPAAPIAutomember_Add_Condition -Description "    Add conditions to an automember rule."
-New-alias -Name remove-IPAAutomemberDefaultGroup -Value Invoke-FreeIPAAPIAutomember_Default_Group_Remove -Description "    Remove default (fallback) group for all unmatched entries."
-New-alias -Name set-IPAAutomemberDefaultGroup -Value Invoke-FreeIPAAPIAutomember_Default_Group_Set -Description "    Set default (fallback) group for all unmatched entries."
-New-alias -Name show-IPAAutomemberDefaultGroup -Value Invoke-FreeIPAAPIAutomember_Default_Group_Show -Description "    Display information about the default (fallback) automember groups."
-New-alias -Name Remove-IPAAutomember -Value Invoke-FreeIPAAPIAutomember_Del -Description "    Delete an automember rule."
-New-alias -Name Find-IPAAutomember -Value Invoke-FreeIPAAPIAutomember_Find -Description "    Search for automember rules."
-New-alias -Name Set-IPAAutomember -Value Invoke-FreeIPAAPIAutomember_Mod -Description "    Modify an automember rule."
+New-alias -Name Add-IPAAutomember -Value Invoke-FreeIPAAPIAutomember_Add -Description "
+    Add an automember rule.
+    "
+New-alias -Name Add-IPAAutomemberCondition -Value Invoke-FreeIPAAPIAutomember_Add_Condition -Description "
+    Add conditions to an automember rule.
+    "
+New-alias -Name remove-IPAAutomemberDefaultGroup -Value Invoke-FreeIPAAPIAutomember_Default_Group_Remove -Description "
+    Remove default (fallback) group for all unmatched entries.
+    "
+New-alias -Name set-IPAAutomemberDefaultGroup -Value Invoke-FreeIPAAPIAutomember_Default_Group_Set -Description "
+    Set default (fallback) group for all unmatched entries.
+    "
+New-alias -Name show-IPAAutomemberDefaultGroup -Value Invoke-FreeIPAAPIAutomember_Default_Group_Show -Description "
+    Display information about the default (fallback) automember groups.
+    "
+New-alias -Name Remove-IPAAutomember -Value Invoke-FreeIPAAPIAutomember_Del -Description "
+    Delete an automember rule.
+    "
+New-alias -Name Find-IPAAutomember -Value Invoke-FreeIPAAPIAutomember_Find -Description "
+    Search for automember rules.
+    "
+New-alias -Name Find-IPAAutomemberOrphans -Value Invoke-FreeIPAAPIAutomember_Find_Orphans -Description "
+    Search for orphan automember rules. The command might need to be run as
+    a privileged user user to get all orphan rules.
+    "
+New-alias -Name Set-IPAAutomember -Value Invoke-FreeIPAAPIAutomember_Mod -Description "
+    Modify an automember rule.
+    "
 New-alias -Name Build-IPAAutomember -Value Invoke-FreeIPAAPIAutomember_Rebuild -Description "Rebuild auto membership."
-New-alias -Name Remove-IPAAutomemberCondition -Value Invoke-FreeIPAAPIAutomember_Remove_Condition -Description "    Remove conditions from an automember rule."
-New-alias -Name Show-IPAAutomember -Value Invoke-FreeIPAAPIAutomember_Show -Description "    Display information about an automember rule."
+New-alias -Name Remove-IPAAutomemberCondition -Value Invoke-FreeIPAAPIAutomember_Remove_Condition -Description "
+    Remove conditions from an automember rule.
+    "
+New-alias -Name Show-IPAAutomember -Value Invoke-FreeIPAAPIAutomember_Show -Description "
+    Display information about an automember rule.
+    "
 New-alias -Name Add-IPAAutomountkey -Value Invoke-FreeIPAAPIAutomountkey_Add -Description "Create a new automount key."
 New-alias -Name Remove-IPAAutomountkey -Value Invoke-FreeIPAAPIAutomountkey_Del -Description "Delete an automount key."
 New-alias -Name Find-IPAAutomountkey -Value Invoke-FreeIPAAPIAutomountkey_Find -Description "Search for an automount key."
@@ -40072,7 +40989,7 @@ New-alias -Name Remove-IPAAutomountmap -Value Invoke-FreeIPAAPIAutomountmap_Del 
 New-alias -Name Find-IPAAutomountmap -Value Invoke-FreeIPAAPIAutomountmap_Find -Description "Search for an automount map."
 New-alias -Name Set-IPAAutomountmap -Value Invoke-FreeIPAAPIAutomountmap_Mod -Description "Modify an automount map."
 New-alias -Name Show-IPAAutomountmap -Value Invoke-FreeIPAAPIAutomountmap_Show -Description "Display an automount map."
-New-alias -Name Use-IPABatch -Value Invoke-FreeIPAAPIBatch
+New-alias -Name Use-IPABatch -Value Invoke-FreeIPAAPIBatch -Description "Make multiple ipa calls via one remote procedure call"
 New-alias -Name Add-IPACaacl -Value Invoke-FreeIPAAPICaacl_Add -Description "Create a new CA ACL."
 New-alias -Name Add-IPACaaclCa -Value Invoke-FreeIPAAPICaacl_Add_Ca -Description "Add CAs to a CA ACL."
 New-alias -Name Add-IPACaaclHost -Value Invoke-FreeIPAAPICaacl_Add_Host -Description "Add target hosts and hostgroups to a CA ACL."
@@ -40095,7 +41012,7 @@ New-alias -Name Remove-IPACa -Value Invoke-FreeIPAAPICa_Del -Description "Delete
 New-alias -Name Disable-IPACa -Value Invoke-FreeIPAAPICa_Disable -Description "Disable a CA."
 New-alias -Name Enable-IPACa -Value Invoke-FreeIPAAPICa_Enable -Description "Enable a CA."
 New-alias -Name Find-IPACa -Value Invoke-FreeIPAAPICa_Find -Description "Search for CAs."
-New-alias -Name Test-IPACaEnabled -Value Invoke-FreeIPAAPICa_Is_Enabled -Description "    Checks if any of the servers has the CA service enabled."
+New-alias -Name Test-IPACaEnabled -Value Invoke-FreeIPAAPICa_Is_Enabled -Description "Checks if any of the servers has the CA service enabled."
 New-alias -Name Set-IPACa -Value Invoke-FreeIPAAPICa_Mod -Description "Modify CA configuration."
 New-alias -Name Show-IPACa -Value Invoke-FreeIPAAPICa_Show -Description "Display the properties of a CA."
 New-alias -Name Set-IPACertmapconfig -Value Invoke-FreeIPAAPICertmapconfig_Mod -Description "Modify Certificate Identity Mapping configuration."
@@ -40107,7 +41024,13 @@ New-alias -Name Enable-IPACertmaprule -Value Invoke-FreeIPAAPICertmaprule_Enable
 New-alias -Name Find-IPACertmaprule -Value Invoke-FreeIPAAPICertmaprule_Find -Description "Search for Certificate Identity Mapping Rules."
 New-alias -Name Set-IPACertmaprule -Value Invoke-FreeIPAAPICertmaprule_Mod -Description "Modify a Certificate Identity Mapping Rule."
 New-alias -Name Show-IPACertmaprule -Value Invoke-FreeIPAAPICertmaprule_Show -Description "Display information about a Certificate Identity Mapping Rule."
-New-alias -Name Search-IPAMatchCertmap -Value Invoke-FreeIPAAPICertmap_Match -Description "    Search for users matching the provided certificate."
+New-alias -Name Search-IPAMatchCertmap -Value Invoke-FreeIPAAPICertmap_Match -Description "
+    Search for users matching the provided certificate.
+
+    This command relies on SSSD to retrieve the list of matching users and
+    may return cached data. For more information on purging SSSD cache,
+    please refer to sss_cache documentation.
+    "
 New-alias -Name Remove-IPACertprofile -Value Invoke-FreeIPAAPICertprofile_Del -Description "Delete a Certificate Profile."
 New-alias -Name Find-IPACertprofile -Value Invoke-FreeIPAAPICertprofile_Find -Description "Search for Certificate Profiles."
 New-alias -Name Import-IPACertprofile -Value Invoke-FreeIPAAPICertprofile_Import -Description "Import a Certificate Profile."
@@ -40121,17 +41044,17 @@ New-alias -Name Show-IPACert -Value Invoke-FreeIPAAPICert_Show -Description "Ret
 New-alias -Name Get-IPAStatusCert -Value Invoke-FreeIPAAPICert_Status -Description "Check the status of a certificate signing request."
 New-alias -Name Find-IPAClass -Value Invoke-FreeIPAAPIClass_Find -Description "Search for classes."
 New-alias -Name Show-IPAClass -Value Invoke-FreeIPAAPIClass_Show -Description "Display information about a class."
-New-alias -Name Get-IPADefaultsDefaults -Value Invoke-FreeIPAAPICommand_Defaults
+New-alias -Name Get-IPADefaultsDefaults -Value Invoke-FreeIPAAPICommand_Defaults -Description "Return command defaults"
 New-alias -Name Find-IPACommand -Value Invoke-FreeIPAAPICommand_Find -Description "Search for commands."
 New-alias -Name Show-IPACommand -Value Invoke-FreeIPAAPICommand_Show -Description "Display information about a command."
 New-alias -Name Test-IPACompatEnabled -Value Invoke-FreeIPAAPICompat_Is_Enabled -Description "Determine whether Schema Compatibility plugin is configured to serve trusted domain users and groups"
 New-alias -Name Set-IPAConfig -Value Invoke-FreeIPAAPIConfig_Mod -Description "Modify configuration options."
 New-alias -Name Show-IPAConfig -Value Invoke-FreeIPAAPIConfig_Show -Description "Show the current configuration."
-New-alias -Name Add-IPACosentry -Value Invoke-FreeIPAAPICosentry_Add
-New-alias -Name Remove-IPACosentry -Value Invoke-FreeIPAAPICosentry_Del
-New-alias -Name Find-IPACosentry -Value Invoke-FreeIPAAPICosentry_Find
-New-alias -Name Set-IPACosentry -Value Invoke-FreeIPAAPICosentry_Mod
-New-alias -Name Show-IPACosentry -Value Invoke-FreeIPAAPICosentry_Show
+New-alias -Name Add-IPACosentry -Value Invoke-FreeIPAAPICosentry_Add -Description "Add Class of Service entry"
+New-alias -Name Remove-IPACosentry -Value Invoke-FreeIPAAPICosentry_Del -Description "Delete Class of Service entry"
+New-alias -Name Find-IPACosentry -Value Invoke-FreeIPAAPICosentry_Find -Description "Search for Class of Service entry"
+New-alias -Name Set-IPACosentry -Value Invoke-FreeIPAAPICosentry_Mod -Description "Modify Class of Service entry"
+New-alias -Name Show-IPACosentry -Value Invoke-FreeIPAAPICosentry_Show -Description "Display Class of Service entry"
 New-alias -Name Add-IPADelegation -Value Invoke-FreeIPAAPIDelegation_Add -Description "Add a new delegation."
 New-alias -Name Remove-IPADelegation -Value Invoke-FreeIPAAPIDelegation_Del -Description "Delete a delegation."
 New-alias -Name Find-IPADelegation -Value Invoke-FreeIPAAPIDelegation_Find -Description "Search for delegations."
@@ -40150,11 +41073,11 @@ New-alias -Name Remove-IPADnsforwardzonePermission -Value Invoke-FreeIPAAPIDnsfo
 New-alias -Name Show-IPADnsforwardzone -Value Invoke-FreeIPAAPIDnsforwardzone_Show -Description "Display information about a DNS forward zone."
 New-alias -Name Add-IPADnsrecord -Value Invoke-FreeIPAAPIDnsrecord_Add -Description "Add new DNS resource record."
 New-alias -Name Remove-IPADnsrecord -Value Invoke-FreeIPAAPIDnsrecord_Del -Description "Delete DNS resource record."
-New-alias -Name Remove-IPADnsrecordEntry -Value Invoke-FreeIPAAPIDnsrecord_Delentry -Description "    Delete DNS record entry."
+New-alias -Name Remove-IPADnsrecordEntry -Value Invoke-FreeIPAAPIDnsrecord_Delentry -Description "Delete DNS record entry."
 New-alias -Name Find-IPADnsrecord -Value Invoke-FreeIPAAPIDnsrecord_Find -Description "Search for DNS resources."
 New-alias -Name Set-IPADnsrecord -Value Invoke-FreeIPAAPIDnsrecord_Mod -Description "Modify a DNS resource record."
 New-alias -Name Show-IPADnsrecord -Value Invoke-FreeIPAAPIDnsrecord_Show -Description "Display DNS resource."
-New-alias -Name Split-IPADnsrecordParts -Value Invoke-FreeIPAAPIDnsrecord_Split_Parts
+New-alias -Name Split-IPADnsrecordParts -Value Invoke-FreeIPAAPIDnsrecord_Split_Parts -Description "Split DNS record to parts"
 New-alias -Name Find-IPADnsserver -Value Invoke-FreeIPAAPIDnsserver_Find -Description "Search for DNS servers."
 New-alias -Name Set-IPADnsserver -Value Invoke-FreeIPAAPIDnsserver_Mod -Description "Modify DNS server configuration"
 New-alias -Name Show-IPADnsserver -Value Invoke-FreeIPAAPIDnsserver_Show -Description "Display configuration of a DNS server."
@@ -40167,7 +41090,7 @@ New-alias -Name Find-IPADnszone -Value Invoke-FreeIPAAPIDnszone_Find -Descriptio
 New-alias -Name Set-IPADnszone -Value Invoke-FreeIPAAPIDnszone_Mod -Description "Modify DNS zone (SOA record)."
 New-alias -Name Remove-IPADnszonePermission -Value Invoke-FreeIPAAPIDnszone_Remove_Permission -Description "Remove a permission for per-zone access delegation."
 New-alias -Name Show-IPADnszone -Value Invoke-FreeIPAAPIDnszone_Show -Description "Display information about a DNS zone (SOA record)."
-New-alias -Name Test-IPADnsEnabled -Value Invoke-FreeIPAAPIDns_Is_Enabled -Description "    Checks if any of the servers has the DNS service enabled."
+New-alias -Name Test-IPADnsEnabled -Value Invoke-FreeIPAAPIDns_Is_Enabled -Description "Checks if any of the servers has the DNS service enabled."
 New-alias -Name Resolve-IPADns -Value Invoke-FreeIPAAPIDns_Resolve -Description "Resolve a host name in DNS. (Deprecated)"
 New-alias -Name Update-IPADnsSystemRecords -Value Invoke-FreeIPAAPIDns_Update_System_Records -Description "Update location and IPA server DNS records"
 New-alias -Name Get-IPADomainlevel -Value Invoke-FreeIPAAPIDomainlevel_Get -Description "Query current Domain Level."
@@ -40175,16 +41098,18 @@ New-alias -Name Set-IPADomainlevel -Value Invoke-FreeIPAAPIDomainlevel_Set -Desc
 New-alias -Name Use-IPAEnv -Value Invoke-FreeIPAAPIEnv -Description "Show environment variables."
 New-alias -Name Add-IPAGroup -Value Invoke-FreeIPAAPIGroup_Add -Description "Create a new group."
 New-alias -Name Add-IPAGroupMember -Value Invoke-FreeIPAAPIGroup_Add_Member -Description "Add members to a group."
+New-alias -Name Add-IPAGroupMemberManager -Value Invoke-FreeIPAAPIGroup_Add_Member_Manager -Description "Add users that can manage members of this group."
 New-alias -Name Remove-IPAGroup -Value Invoke-FreeIPAAPIGroup_Del -Description "Delete group."
 New-alias -Name Remove-IPAManagedGroup -Value Invoke-FreeIPAAPIGroup_Detach -Description "Detach a managed group from a user."
 New-alias -Name Find-IPAGroup -Value Invoke-FreeIPAAPIGroup_Find -Description "Search for groups."
 New-alias -Name Set-IPAGroup -Value Invoke-FreeIPAAPIGroup_Mod -Description "Modify a group."
 New-alias -Name Remove-IPAGroupMember -Value Invoke-FreeIPAAPIGroup_Remove_Member -Description "Remove members from a group."
+New-alias -Name Remove-IPAGroupMemberManager -Value Invoke-FreeIPAAPIGroup_Remove_Member_Manager -Description "Remove users that can manage members of this group."
 New-alias -Name Show-IPAGroup -Value Invoke-FreeIPAAPIGroup_Show -Description "Display information about a named group."
 New-alias -Name Add-IPAHbacrule -Value Invoke-FreeIPAAPIHbacrule_Add -Description "Create a new HBAC rule."
 New-alias -Name Add-IPAHbacruleHost -Value Invoke-FreeIPAAPIHbacrule_Add_Host -Description "Add target hosts and hostgroups to an HBAC rule."
 New-alias -Name Add-IPAHbacruleService -Value Invoke-FreeIPAAPIHbacrule_Add_Service -Description "Add services to an HBAC rule."
-New-alias -Name Add-IPAHbacruleSourcehost -Value Invoke-FreeIPAAPIHbacrule_Add_Sourcehost
+New-alias -Name Add-IPAHbacruleSourcehost -Value Invoke-FreeIPAAPIHbacrule_Add_Sourcehost -Description "Add source hosts and hostgroups to an HBAC rule."
 New-alias -Name Add-IPAHbacruleUser -Value Invoke-FreeIPAAPIHbacrule_Add_User -Description "Add users and groups to an HBAC rule."
 New-alias -Name Remove-IPAHbacrule -Value Invoke-FreeIPAAPIHbacrule_Del -Description "Delete an HBAC rule."
 New-alias -Name Disable-IPAHbacrule -Value Invoke-FreeIPAAPIHbacrule_Disable -Description "Disable an HBAC rule."
@@ -40193,7 +41118,7 @@ New-alias -Name Find-IPAHbacrule -Value Invoke-FreeIPAAPIHbacrule_Find -Descript
 New-alias -Name Set-IPAHbacrule -Value Invoke-FreeIPAAPIHbacrule_Mod -Description "Modify an HBAC rule."
 New-alias -Name Remove-IPAHbacruleHost -Value Invoke-FreeIPAAPIHbacrule_Remove_Host -Description "Remove target hosts and hostgroups from an HBAC rule."
 New-alias -Name Remove-IPAHbacruleService -Value Invoke-FreeIPAAPIHbacrule_Remove_Service -Description "Remove service and service groups from an HBAC rule."
-New-alias -Name Remove-IPAHbacruleSourcehost -Value Invoke-FreeIPAAPIHbacrule_Remove_Sourcehost
+New-alias -Name Remove-IPAHbacruleSourcehost -Value Invoke-FreeIPAAPIHbacrule_Remove_Sourcehost -Description "Remove source hosts and hostgroups from an HBAC rule."
 New-alias -Name Remove-IPAHbacruleUser -Value Invoke-FreeIPAAPIHbacrule_Remove_User -Description "Remove users and groups from an HBAC rule."
 New-alias -Name Show-IPAHbacrule -Value Invoke-FreeIPAAPIHbacrule_Show -Description "Display the properties of an HBAC rule."
 New-alias -Name Add-IPAHbacsvcgroup -Value Invoke-FreeIPAAPIHbacsvcgroup_Add -Description "Add a new HBAC service group."
@@ -40211,10 +41136,12 @@ New-alias -Name Show-IPAHbacsvc -Value Invoke-FreeIPAAPIHbacsvc_Show -Descriptio
 New-alias -Name Use-IPAHbactest -Value Invoke-FreeIPAAPIHbactest -Description "Simulate use of Host-based access controls"
 New-alias -Name Add-IPAHostgroup -Value Invoke-FreeIPAAPIHostgroup_Add -Description "Add a new hostgroup."
 New-alias -Name Add-IPAHostgroupMember -Value Invoke-FreeIPAAPIHostgroup_Add_Member -Description "Add members to a hostgroup."
+New-alias -Name Add-IPAHostgroupMemberManager -Value Invoke-FreeIPAAPIHostgroup_Add_Member_Manager -Description "Add users that can manage members of this hostgroup."
 New-alias -Name Remove-IPAHostgroup -Value Invoke-FreeIPAAPIHostgroup_Del -Description "Delete a hostgroup."
 New-alias -Name Find-IPAHostgroup -Value Invoke-FreeIPAAPIHostgroup_Find -Description "Search for hostgroups."
 New-alias -Name Set-IPAHostgroup -Value Invoke-FreeIPAAPIHostgroup_Mod -Description "Modify a hostgroup."
 New-alias -Name Remove-IPAHostgroupMember -Value Invoke-FreeIPAAPIHostgroup_Remove_Member -Description "Remove members from a hostgroup."
+New-alias -Name Remove-IPAHostgroupMemberManager -Value Invoke-FreeIPAAPIHostgroup_Remove_Member_Manager -Description "Remove users that can manage members of this hostgroup."
 New-alias -Name Show-IPAHostgroup -Value Invoke-FreeIPAAPIHostgroup_Show -Description "Display information about a hostgroup."
 New-alias -Name Add-IPAHost -Value Invoke-FreeIPAAPIHost_Add -Description "Add a new host."
 New-alias -Name Add-IPAHostCert -Value Invoke-FreeIPAAPIHost_Add_Cert -Description "Add certificates to host entry"
@@ -40232,7 +41159,7 @@ New-alias -Name Remove-IPAHostCert -Value Invoke-FreeIPAAPIHost_Remove_Cert -Des
 New-alias -Name Remove-IPAHostManagedby -Value Invoke-FreeIPAAPIHost_Remove_Managedby -Description "Remove hosts that can manage this host."
 New-alias -Name Remove-IPAHostPrincipal -Value Invoke-FreeIPAAPIHost_Remove_Principal -Description "Remove principal alias from a host entry"
 New-alias -Name Show-IPAHost -Value Invoke-FreeIPAAPIHost_Show -Description "Display information about a host."
-New-alias -Name Get-IPAMessagesI18n -Value Invoke-FreeIPAAPII18n_Messages
+New-alias -Name Get-IPAMessagesI18n -Value Invoke-FreeIPAAPII18n_Messages -Description "Internationalization messages"
 New-alias -Name Add-IPAIdoverridegroup -Value Invoke-FreeIPAAPIIdoverridegroup_Add -Description "Add a new Group ID override."
 New-alias -Name Remove-IPAIdoverridegroup -Value Invoke-FreeIPAAPIIdoverridegroup_Del -Description "Delete an Group ID override."
 New-alias -Name Find-IPAIdoverridegroup -Value Invoke-FreeIPAAPIIdoverridegroup_Find -Description "Search for an Group ID override."
@@ -40245,10 +41172,56 @@ New-alias -Name Find-IPAIdoverrideuser -Value Invoke-FreeIPAAPIIdoverrideuser_Fi
 New-alias -Name Set-IPAIdoverrideuser -Value Invoke-FreeIPAAPIIdoverrideuser_Mod -Description "Modify an User ID override."
 New-alias -Name Remove-IPAIdoverrideuserCert -Value Invoke-FreeIPAAPIIdoverrideuser_Remove_Cert -Description "Remove one or more certificates to the idoverrideuser entry"
 New-alias -Name Show-IPAIdoverrideuser -Value Invoke-FreeIPAAPIIdoverrideuser_Show -Description "Display information about an User ID override."
-New-alias -Name Add-IPAIdrange -Value Invoke-FreeIPAAPIIdrange_Add -Description "    Add new ID range."
+New-alias -Name Add-IPAIdrange -Value Invoke-FreeIPAAPIIdrange_Add -Description "
+    Add new ID range.
+
+    To add a new ID range you always have to specify
+
+        --base-id
+        --range-size
+
+    Additionally
+
+        --rid-base
+        --secondary-rid-base
+
+    may be given for a new ID range for the local domain while
+
+        --rid-base
+        --dom-sid
+
+    must be given to add a new range for a trusted AD domain.
+
+=======
+WARNING:
+
+DNA plugin in 389-ds will allocate IDs based on the ranges configured for the
+local domain. Currently the DNA plugin *cannot* be reconfigured itself based
+on the local ranges set via this family of commands.
+
+Manual configuration change has to be done in the DNA plugin configuration for
+the new local range. Specifically, The dnaNextRange attribute of 'cn=Posix
+IDs,cn=Distributed Numeric Assignment Plugin,cn=plugins,cn=config' has to be
+modified to match the new range.
+=======
+"
 New-alias -Name Remove-IPAIdrange -Value Invoke-FreeIPAAPIIdrange_Del -Description "Delete an ID range."
 New-alias -Name Find-IPAIdrange -Value Invoke-FreeIPAAPIIdrange_Find -Description "Search for ranges."
-New-alias -Name Set-IPAIdrange -Value Invoke-FreeIPAAPIIdrange_Mod -Description "Modify ID range."
+New-alias -Name Set-IPAIdrange -Value Invoke-FreeIPAAPIIdrange_Mod -Description "Modify ID range.
+
+=======
+WARNING:
+
+DNA plugin in 389-ds will allocate IDs based on the ranges configured for the
+local domain. Currently the DNA plugin *cannot* be reconfigured itself based
+on the local ranges set via this family of commands.
+
+Manual configuration change has to be done in the DNA plugin configuration for
+the new local range. Specifically, The dnaNextRange attribute of 'cn=Posix
+IDs,cn=Distributed Numeric Assignment Plugin,cn=plugins,cn=config' has to be
+modified to match the new range.
+=======
+"
 New-alias -Name Show-IPAIdrange -Value Invoke-FreeIPAAPIIdrange_Show -Description "Display information about a range."
 New-alias -Name Add-IPAIdview -Value Invoke-FreeIPAAPIIdview_Add -Description "Add a new ID View."
 New-alias -Name Publish-IPAIdview -Value Invoke-FreeIPAAPIIdview_Apply -Description "Applies ID View to specified hosts or current members of specified hostgroups. If any other ID View is applied to the host, it is overridden."
@@ -40258,8 +41231,8 @@ New-alias -Name Set-IPAIdview -Value Invoke-FreeIPAAPIIdview_Mod -Description "M
 New-alias -Name Show-IPAIdview -Value Invoke-FreeIPAAPIIdview_Show -Description "Display information about an ID View."
 New-alias -Name Undo-IPAIdview -Value Invoke-FreeIPAAPIIdview_Unapply -Description "Clears ID View from specified hosts or current members of specified hostgroups."
 New-alias -Name Use-IPAJoin -Value Invoke-FreeIPAAPIJoin -Description "Join an IPA domain"
-New-alias -Name Get-IPAMetadata -Value Invoke-FreeIPAAPIJson_Metadata -Description "    Export plugin meta-data for the webUI."
-New-alias -Name Test-IPAKraEnabled -Value Invoke-FreeIPAAPIKra_Is_Enabled
+New-alias -Name Get-IPAMetadata -Value Invoke-FreeIPAAPIJson_Metadata -Description "Export plugin meta-data for the webUI."
+New-alias -Name Test-IPAKraEnabled -Value Invoke-FreeIPAAPIKra_Is_Enabled -Description "Checks if any of the servers has the KRA service enabled"
 New-alias -Name Set-IPAKrbtpolicy -Value Invoke-FreeIPAAPIKrbtpolicy_Mod -Description "Modify Kerberos ticket policy."
 New-alias -Name Reset-IPAKrbtpolicy -Value Invoke-FreeIPAAPIKrbtpolicy_Reset -Description "Reset Kerberos ticket policy to the default values."
 New-alias -Name Show-IPAKrbtpolicy -Value Invoke-FreeIPAAPIKrbtpolicy_Show -Description "Display the current Kerberos ticket policy."
@@ -40307,7 +41280,7 @@ New-alias -Name Add-IPAPrivilegePermission -Value Invoke-FreeIPAAPIPrivilege_Add
 New-alias -Name Remove-IPAPrivilege -Value Invoke-FreeIPAAPIPrivilege_Del -Description "Delete a privilege."
 New-alias -Name Find-IPAPrivilege -Value Invoke-FreeIPAAPIPrivilege_Find -Description "Search for privileges."
 New-alias -Name Set-IPAPrivilege -Value Invoke-FreeIPAAPIPrivilege_Mod -Description "Modify a privilege."
-New-alias -Name Remove-IPAPrivilegeMember -Value Invoke-FreeIPAAPIPrivilege_Remove_Member -Description "    Remove members from a privilege"
+New-alias -Name Remove-IPAPrivilegeMember -Value Invoke-FreeIPAAPIPrivilege_Remove_Member -Description "Remove members from a privilege"
 New-alias -Name Remove-IPAPrivilegePermission -Value Invoke-FreeIPAAPIPrivilege_Remove_Permission -Description "Remove permissions from a privilege."
 New-alias -Name Show-IPAPrivilege -Value Invoke-FreeIPAAPIPrivilege_Show -Description "Display information about a privilege."
 New-alias -Name Add-IPAPwpolicy -Value Invoke-FreeIPAAPIPwpolicy_Add -Description "Add a new group password policy."
@@ -40320,7 +41293,20 @@ New-alias -Name Remove-IPARadiusproxy -Value Invoke-FreeIPAAPIRadiusproxy_Del -D
 New-alias -Name Find-IPARadiusproxy -Value Invoke-FreeIPAAPIRadiusproxy_Find -Description "Search for RADIUS proxy servers."
 New-alias -Name Set-IPARadiusproxy -Value Invoke-FreeIPAAPIRadiusproxy_Mod -Description "Modify a RADIUS proxy server."
 New-alias -Name Show-IPARadiusproxy -Value Invoke-FreeIPAAPIRadiusproxy_Show -Description "Display information about a RADIUS proxy server."
-New-alias -Name Set-IPARealmdomains -Value Invoke-FreeIPAAPIRealmdomains_Mod -Description "    Modify realm domains"
+New-alias -Name Set-IPARealmdomains -Value Invoke-FreeIPAAPIRealmdomains_Mod -Description "
+    Modify realm domains
+
+    DNS check: When manually adding a domain to the list, a DNS check is
+    performed by default. It ensures that the domain is associated with
+    the IPA realm, by checking whether the domain has a _kerberos TXT record
+    containing the IPA realm name. This check can be skipped by specifying
+    --force option.
+
+    Removal: when a realm domain which has a matching DNS zone managed by
+    IPA is being removed, a corresponding _kerberos TXT record in the zone is
+    removed automatically as well. Other records in the zone or the zone
+    itself are not affected.
+    "
 New-alias -Name Show-IPARealmdomains -Value Invoke-FreeIPAAPIRealmdomains_Show -Description "Display the list of realm domains."
 New-alias -Name Add-IPARole -Value Invoke-FreeIPAAPIRole_Add -Description "Add a new role."
 New-alias -Name Add-IPARoleMember -Value Invoke-FreeIPAAPIRole_Add_Member -Description "Add members to a role."
@@ -40331,7 +41317,7 @@ New-alias -Name Set-IPARole -Value Invoke-FreeIPAAPIRole_Mod -Description "Modif
 New-alias -Name Remove-IPARoleMember -Value Invoke-FreeIPAAPIRole_Remove_Member -Description "Remove members from a role."
 New-alias -Name Remove-IPARolePrivilege -Value Invoke-FreeIPAAPIRole_Remove_Privilege -Description "Remove privileges from a role."
 New-alias -Name Show-IPARole -Value Invoke-FreeIPAAPIRole_Show -Description "Display information about a role."
-New-alias -Name Use-IPASchema -Value Invoke-FreeIPAAPISchema
+New-alias -Name Use-IPASchema -Value Invoke-FreeIPAAPISchema -Description "Store and provide schema for commands and topics"
 New-alias -Name Add-IPASelfservice -Value Invoke-FreeIPAAPISelfservice_Add -Description "Add a new self-service permission."
 New-alias -Name Remove-IPASelfservice -Value Invoke-FreeIPAAPISelfservice_Del -Description "Delete a self-service permission."
 New-alias -Name Find-IPASelfservice -Value Invoke-FreeIPAAPISelfservice_Find -Description "Search for a self-service permission."
@@ -40355,6 +41341,7 @@ New-alias -Name Set-IPAServer -Value Invoke-FreeIPAAPIServer_Mod -Description "M
 New-alias -Name Find-IPAServerRole -Value Invoke-FreeIPAAPIServer_Role_Find -Description "Find a server role on a server(s)"
 New-alias -Name Show-IPAServerRole -Value Invoke-FreeIPAAPIServer_Role_Show -Description "Show role status on a server"
 New-alias -Name Show-IPAServer -Value Invoke-FreeIPAAPIServer_Show -Description "Show IPA server."
+New-alias -Name State-IPAServer -Value Invoke-FreeIPAAPIServer_State -Description "Set enabled/hidden state of a server."
 New-alias -Name Add-IPAServicedelegationrule -Value Invoke-FreeIPAAPIServicedelegationrule_Add -Description "Create a new service delegation rule."
 New-alias -Name Add-IPAServicedelegationruleMember -Value Invoke-FreeIPAAPIServicedelegationrule_Add_Member -Description "Add member to a named service delegation rule."
 New-alias -Name Add-IPAServicedelegationruleTarget -Value Invoke-FreeIPAAPIServicedelegationrule_Add_Target -Description "Add target to a named service delegation rule."
@@ -40373,6 +41360,7 @@ New-alias -Name Add-IPAService -Value Invoke-FreeIPAAPIService_Add -Description 
 New-alias -Name Add-IPAServiceCert -Value Invoke-FreeIPAAPIService_Add_Cert -Description "Add new certificates to a service"
 New-alias -Name Add-IPAServiceHost -Value Invoke-FreeIPAAPIService_Add_Host -Description "Add hosts that can manage this service."
 New-alias -Name Add-IPAServicePrincipal -Value Invoke-FreeIPAAPIService_Add_Principal -Description "Add new principal alias to a service"
+New-alias -Name Add-IPAServiceSmb -Value Invoke-FreeIPAAPIService_Add_Smb -Description "Add a new SMB service."
 New-alias -Name Approve-IPAServiceCreateKeytab -Value Invoke-FreeIPAAPIService_Allow_Create_Keytab -Description "Allow users, groups, hosts or host groups to create a keytab of this service."
 New-alias -Name Approve-IPAServiceRetrieveKeytab -Value Invoke-FreeIPAAPIService_Allow_Retrieve_Keytab -Description "Allow users, groups, hosts or host groups to retrieve a keytab of this service."
 New-alias -Name Remove-IPAService -Value Invoke-FreeIPAAPIService_Del -Description "Delete an IPA service."
@@ -40385,7 +41373,7 @@ New-alias -Name Remove-IPAServiceCert -Value Invoke-FreeIPAAPIService_Remove_Cer
 New-alias -Name Remove-IPAServiceHost -Value Invoke-FreeIPAAPIService_Remove_Host -Description "Remove hosts that can manage this service."
 New-alias -Name Remove-IPAServicePrincipal -Value Invoke-FreeIPAAPIService_Remove_Principal -Description "Remove principal alias from a service"
 New-alias -Name Show-IPAService -Value Invoke-FreeIPAAPIService_Show -Description "Display information about an IPA service."
-New-alias -Name Disconnect-IPA -Value Invoke-FreeIPAAPISession_Logout -Description "    RPC command used to log the current user out of their session."
+New-alias -Name Disconnect-IPA -Value Invoke-FreeIPAAPISession_Logout -Description "RPC command used to log the current user out of their session."
 New-alias -Name Get-IPAStatusSidgenRun -Value Invoke-FreeIPAAPISidgen_Was_Run -Description "Determine whether ipa-adtrust-install has been run with sidgen task"
 New-alias -Name Enable-IPAStageuser -Value Invoke-FreeIPAAPIStageuser_Activate -Description "Activate a stage user."
 New-alias -Name Add-IPAStageuser -Value Invoke-FreeIPAAPIStageuser_Add -Description "Add a new stage user."
@@ -40447,7 +41435,15 @@ New-alias -Name Remove-IPATopologysuffix -Value Invoke-FreeIPAAPITopologysuffix_
 New-alias -Name Find-IPATopologysuffix -Value Invoke-FreeIPAAPITopologysuffix_Find -Description "Search for topology suffixes."
 New-alias -Name Set-IPATopologysuffix -Value Invoke-FreeIPAAPITopologysuffix_Mod -Description "Modify a topology suffix."
 New-alias -Name Show-IPATopologysuffix -Value Invoke-FreeIPAAPITopologysuffix_Show -Description "Show managed suffix."
-New-alias -Name Confirm-IPATopologysuffix -Value Invoke-FreeIPAAPITopologysuffix_Verify -Description "Verify replication topology for suffix."
+New-alias -Name Confirm-IPATopologysuffix -Value Invoke-FreeIPAAPITopologysuffix_Verify -Description "
+Verify replication topology for suffix.
+
+Checks done:
+  1. check if a topology is not disconnected. In other words if there are
+     replication paths between all servers.
+  2. check if servers don't have more than the recommended number of
+     replication agreements
+"
 New-alias -Name Set-IPATrustconfig -Value Invoke-FreeIPAAPITrustconfig_Mod -Description "Modify global trust configuration."
 New-alias -Name Show-IPATrustconfig -Value Invoke-FreeIPAAPITrustconfig_Show -Description "Show global trust configuration."
 New-alias -Name Add-IPATrustdomain -Value Invoke-FreeIPAAPITrustdomain_Add -Description "Allow access from the trusted domain"
@@ -40456,11 +41452,33 @@ New-alias -Name Disable-IPATrustdomain -Value Invoke-FreeIPAAPITrustdomain_Disab
 New-alias -Name Enable-IPATrustdomain -Value Invoke-FreeIPAAPITrustdomain_Enable -Description "Allow use of IPA resources by the domain of the trust"
 New-alias -Name Find-IPATrustdomain -Value Invoke-FreeIPAAPITrustdomain_Find -Description "Search domains of the trust"
 New-alias -Name Set-IPATrustdomain -Value Invoke-FreeIPAAPITrustdomain_Mod -Description "Modify trustdomain of the trust"
-New-alias -Name Add-IPATrust -Value Invoke-FreeIPAAPITrust_Add -Description "Add new trust to use."
+New-alias -Name Add-IPATrust -Value Invoke-FreeIPAAPITrust_Add -Description "
+Add new trust to use.
+
+This command establishes trust relationship to another domain
+which becomes 'trusted'. As result, users of the trusted domain
+may access resources of this domain.
+
+Only trusts to Active Directory domains are supported right now.
+
+The command can be safely run multiple times against the same domain,
+this will cause change to trust relationship credentials on both
+sides.
+
+Note that if the command was previously run with a specific range type,
+or with automatic detection of the range type, and you want to configure a
+different range type, you may need to delete first the ID range using
+ipa idrange-del before retrying the command with the desired range type.
+    "
 New-alias -Name Remove-IPATrust -Value Invoke-FreeIPAAPITrust_Del -Description "Delete a trust."
 New-alias -Name Build-IPATrustDomains -Value Invoke-FreeIPAAPITrust_Fetch_Domains -Description "Refresh list of the domains associated with the trust"
 New-alias -Name Find-IPATrust -Value Invoke-FreeIPAAPITrust_Find -Description "Search for trusts."
-New-alias -Name Set-IPATrust -Value Invoke-FreeIPAAPITrust_Mod -Description "    Modify a trust (for future use)."
+New-alias -Name Set-IPATrust -Value Invoke-FreeIPAAPITrust_Mod -Description "
+    Modify a trust (for future use).
+
+    Currently only the default option to modify the LDAP attributes is
+    available. More specific options will be added in coming releases.
+    "
 New-alias -Name Resolve-IPATrust -Value Invoke-FreeIPAAPITrust_Resolve -Description "Resolve security identifiers of users and groups in trusted domains"
 New-alias -Name Show-IPATrust -Value Invoke-FreeIPAAPITrust_Show -Description "Display information about a trust."
 New-alias -Name Add-IPAUser -Value Invoke-FreeIPAAPIUser_Add -Description "Add a new user."
@@ -40479,29 +41497,56 @@ New-alias -Name Remove-IPAUserManager -Value Invoke-FreeIPAAPIUser_Remove_Manage
 New-alias -Name Remove-IPAUserPrincipal -Value Invoke-FreeIPAAPIUser_Remove_Principal -Description "Remove principal alias from the user entry"
 New-alias -Name Show-IPAUser -Value Invoke-FreeIPAAPIUser_Show -Description "Display information about a user."
 New-alias -Name Move-IPADelToStageUser -Value Invoke-FreeIPAAPIUser_Stage -Description "Move deleted user into staged area"
-New-alias -Name Get-IPAStatusUser -Value Invoke-FreeIPAAPIUser_Status -Description "    Lockout status of a user account"
+New-alias -Name Get-IPAStatusUser -Value Invoke-FreeIPAAPIUser_Status -Description "
+    Lockout status of a user account
+
+    An account may become locked if the password is entered incorrectly too
+    many times within a specific time period as controlled by password
+    policy. A locked account is a temporary condition and may be unlocked by
+    an administrator.
+
+    This connects to each IPA master and displays the lockout status on
+    each one.
+
+    To determine whether an account is locked on a given server you need
+    to compare the number of failed logins and the time of the last failure.
+    For an account to be locked it must exceed the maxfail failures within
+    the failinterval duration as specified in the password policy associated
+    with the user.
+
+    The failed login counter is modified only when a user attempts a log in
+    so it is possible that an account may appear locked but the last failed
+    login attempt is older than the lockouttime of the password policy. This
+    means that the user may attempt a login again. "
 New-alias -Name Restore-IPAUser -Value Invoke-FreeIPAAPIUser_Undel -Description "Undelete a delete user account."
-New-alias -Name Unlock-IPAUser -Value Invoke-FreeIPAAPIUser_Unlock -Description "    Unlock a user account"
+New-alias -Name Unlock-IPAUser -Value Invoke-FreeIPAAPIUser_Unlock -Description "
+    Unlock a user account
+
+    An account may become locked if the password is entered incorrectly too
+    many times within a specific time period as controlled by password
+    policy. A locked account is a temporary condition and may be unlocked by
+    an administrator."
 New-alias -Name Show-IPAVaultconfig -Value Invoke-FreeIPAAPIVaultconfig_Show -Description "Show vault configuration."
 New-alias -Name Add-IPAVaultcontainerOwner -Value Invoke-FreeIPAAPIVaultcontainer_Add_Owner -Description "Add owners to a vault container."
 New-alias -Name Remove-IPAVaultcontainer -Value Invoke-FreeIPAAPIVaultcontainer_Del -Description "Delete a vault container."
 New-alias -Name Remove-IPAVaultcontainerOwner -Value Invoke-FreeIPAAPIVaultcontainer_Remove_Owner -Description "Remove owners from a vault container."
 New-alias -Name Show-IPAVaultcontainer -Value Invoke-FreeIPAAPIVaultcontainer_Show -Description "Display information about a vault container."
-New-alias -Name Add-IPAVaultInternal -Value Invoke-FreeIPAAPIVault_Add_Internal
+New-alias -Name Add-IPAVaultInternal -Value Invoke-FreeIPAAPIVault_Add_Internal -Description "Add a vault."
 New-alias -Name Add-IPAVaultMember -Value Invoke-FreeIPAAPIVault_Add_Member -Description "Add members to a vault."
 New-alias -Name Add-IPAVaultOwner -Value Invoke-FreeIPAAPIVault_Add_Owner -Description "Add owners to a vault."
-New-alias -Name Move-IPAToArchiveVaultInternal -Value Invoke-FreeIPAAPIVault_Archive_Internal
+New-alias -Name Move-IPAToArchiveVaultInternal -Value Invoke-FreeIPAAPIVault_Archive_Internal -Description "Archive data into a vault."
 New-alias -Name Remove-IPAVault -Value Invoke-FreeIPAAPIVault_Del -Description "Delete a vault."
 New-alias -Name Find-IPAVault -Value Invoke-FreeIPAAPIVault_Find -Description "Search for vaults."
-New-alias -Name Set-IPAVaultInternal -Value Invoke-FreeIPAAPIVault_Mod_Internal
+New-alias -Name Set-IPAVaultInternal -Value Invoke-FreeIPAAPIVault_Mod_Internal -Description "Modify a vault."
 New-alias -Name Remove-IPAVaultMember -Value Invoke-FreeIPAAPIVault_Remove_Member -Description "Remove members from a vault."
 New-alias -Name Remove-IPAVaultOwner -Value Invoke-FreeIPAAPIVault_Remove_Owner -Description "Remove owners from a vault."
-New-alias -Name Get-IPAVaultInternal -Value Invoke-FreeIPAAPIVault_Retrieve_Internal
+New-alias -Name Get-IPAVaultInternal -Value Invoke-FreeIPAAPIVault_Retrieve_Internal -Description "Retrieve data from a vault."
 New-alias -Name Show-IPAVault -Value Invoke-FreeIPAAPIVault_Show -Description "Display information about a vault."
 New-alias -Name Use-IPAWhoami -Value Invoke-FreeIPAAPIWhoami -Description "Describe currently authenticated identity."
 New-Alias -Name Set-IPACredentials -value Set-FreeIPAAPICredentials -Description "Set your IPA API Credential for authentication purpose if your using non Kerberos authentication"
 New-Alias -Name Import-IPACrendentials -Value Import-FreeIPAAPICrendentials -Description "Import your IPA API Credential from a local file hosted in your Windows Profile"
 New-Alias -Name Set-IPAServerConfig -Value Set-FreeIPAAPIServerConfig -Description "Set IPA server URL and client version"
 New-Alias -Name Connect-IPA -value Get-FreeIPAAPIAuthenticationCookie -Description "Get your authentication cookie and save it to be used with all cmdlets/functions"
-Export-ModuleMember -Function Invoke-FreeIPAAPIAci_Add,Invoke-FreeIPAAPIAci_Del,Invoke-FreeIPAAPIAci_Find,Invoke-FreeIPAAPIAci_Mod,Invoke-FreeIPAAPIAci_Rename,Invoke-FreeIPAAPIAci_Show,Invoke-FreeIPAAPIAdtrust_Is_Enabled,Invoke-FreeIPAAPIAutomember_Add,Invoke-FreeIPAAPIAutomember_Add_Condition,Invoke-FreeIPAAPIAutomember_Default_Group_Remove,Invoke-FreeIPAAPIAutomember_Default_Group_Set,Invoke-FreeIPAAPIAutomember_Default_Group_Show,Invoke-FreeIPAAPIAutomember_Del,Invoke-FreeIPAAPIAutomember_Find,Invoke-FreeIPAAPIAutomember_Mod,Invoke-FreeIPAAPIAutomember_Rebuild,Invoke-FreeIPAAPIAutomember_Remove_Condition,Invoke-FreeIPAAPIAutomember_Show,Invoke-FreeIPAAPIAutomountkey_Add,Invoke-FreeIPAAPIAutomountkey_Del,Invoke-FreeIPAAPIAutomountkey_Find,Invoke-FreeIPAAPIAutomountkey_Mod,Invoke-FreeIPAAPIAutomountkey_Show,Invoke-FreeIPAAPIAutomountlocation_Add,Invoke-FreeIPAAPIAutomountlocation_Del,Invoke-FreeIPAAPIAutomountlocation_Find,Invoke-FreeIPAAPIAutomountlocation_Show,Invoke-FreeIPAAPIAutomountlocation_Tofiles,Invoke-FreeIPAAPIAutomountmap_Add,Invoke-FreeIPAAPIAutomountmap_Add_Indirect,Invoke-FreeIPAAPIAutomountmap_Del,Invoke-FreeIPAAPIAutomountmap_Find,Invoke-FreeIPAAPIAutomountmap_Mod,Invoke-FreeIPAAPIAutomountmap_Show,Invoke-FreeIPAAPIBatch,Invoke-FreeIPAAPICaacl_Add,Invoke-FreeIPAAPICaacl_Add_Ca,Invoke-FreeIPAAPICaacl_Add_Host,Invoke-FreeIPAAPICaacl_Add_Profile,Invoke-FreeIPAAPICaacl_Add_Service,Invoke-FreeIPAAPICaacl_Add_User,Invoke-FreeIPAAPICaacl_Del,Invoke-FreeIPAAPICaacl_Disable,Invoke-FreeIPAAPICaacl_Enable,Invoke-FreeIPAAPICaacl_Find,Invoke-FreeIPAAPICaacl_Mod,Invoke-FreeIPAAPICaacl_Remove_Ca,Invoke-FreeIPAAPICaacl_Remove_Host,Invoke-FreeIPAAPICaacl_Remove_Profile,Invoke-FreeIPAAPICaacl_Remove_Service,Invoke-FreeIPAAPICaacl_Remove_User,Invoke-FreeIPAAPICaacl_Show,Invoke-FreeIPAAPICa_Add,Invoke-FreeIPAAPICa_Del,Invoke-FreeIPAAPICa_Disable,Invoke-FreeIPAAPICa_Enable,Invoke-FreeIPAAPICa_Find,Invoke-FreeIPAAPICa_Is_Enabled,Invoke-FreeIPAAPICa_Mod,Invoke-FreeIPAAPICa_Show,Invoke-FreeIPAAPICertmapconfig_Mod,Invoke-FreeIPAAPICertmapconfig_Show,Invoke-FreeIPAAPICertmaprule_Add,Invoke-FreeIPAAPICertmaprule_Del,Invoke-FreeIPAAPICertmaprule_Disable,Invoke-FreeIPAAPICertmaprule_Enable,Invoke-FreeIPAAPICertmaprule_Find,Invoke-FreeIPAAPICertmaprule_Mod,Invoke-FreeIPAAPICertmaprule_Show,Invoke-FreeIPAAPICertmap_Match,Invoke-FreeIPAAPICertprofile_Del,Invoke-FreeIPAAPICertprofile_Find,Invoke-FreeIPAAPICertprofile_Import,Invoke-FreeIPAAPICertprofile_Mod,Invoke-FreeIPAAPICertprofile_Show,Invoke-FreeIPAAPICert_Find,Invoke-FreeIPAAPICert_Remove_Hold,Invoke-FreeIPAAPICert_Request,Invoke-FreeIPAAPICert_Revoke,Invoke-FreeIPAAPICert_Show,Invoke-FreeIPAAPICert_Status,Invoke-FreeIPAAPIClass_Find,Invoke-FreeIPAAPIClass_Show,Invoke-FreeIPAAPICommand_Defaults,Invoke-FreeIPAAPICommand_Find,Invoke-FreeIPAAPICommand_Show,Invoke-FreeIPAAPICompat_Is_Enabled,Invoke-FreeIPAAPIConfig_Mod,Invoke-FreeIPAAPIConfig_Show,Invoke-FreeIPAAPICosentry_Add,Invoke-FreeIPAAPICosentry_Del,Invoke-FreeIPAAPICosentry_Find,Invoke-FreeIPAAPICosentry_Mod,Invoke-FreeIPAAPICosentry_Show,Invoke-FreeIPAAPIDelegation_Add,Invoke-FreeIPAAPIDelegation_Del,Invoke-FreeIPAAPIDelegation_Find,Invoke-FreeIPAAPIDelegation_Mod,Invoke-FreeIPAAPIDelegation_Show,Invoke-FreeIPAAPIDnsconfig_Mod,Invoke-FreeIPAAPIDnsconfig_Show,Invoke-FreeIPAAPIDnsforwardzone_Add,Invoke-FreeIPAAPIDnsforwardzone_Add_Permission,Invoke-FreeIPAAPIDnsforwardzone_Del,Invoke-FreeIPAAPIDnsforwardzone_Disable,Invoke-FreeIPAAPIDnsforwardzone_Enable,Invoke-FreeIPAAPIDnsforwardzone_Find,Invoke-FreeIPAAPIDnsforwardzone_Mod,Invoke-FreeIPAAPIDnsforwardzone_Remove_Permission,Invoke-FreeIPAAPIDnsforwardzone_Show,Invoke-FreeIPAAPIDnsrecord_Add,Invoke-FreeIPAAPIDnsrecord_Del,Invoke-FreeIPAAPIDnsrecord_Delentry,Invoke-FreeIPAAPIDnsrecord_Find,Invoke-FreeIPAAPIDnsrecord_Mod,Invoke-FreeIPAAPIDnsrecord_Show,Invoke-FreeIPAAPIDnsrecord_Split_Parts,Invoke-FreeIPAAPIDnsserver_Find,Invoke-FreeIPAAPIDnsserver_Mod,Invoke-FreeIPAAPIDnsserver_Show,Invoke-FreeIPAAPIDnszone_Add,Invoke-FreeIPAAPIDnszone_Add_Permission,Invoke-FreeIPAAPIDnszone_Del,Invoke-FreeIPAAPIDnszone_Disable,Invoke-FreeIPAAPIDnszone_Enable,Invoke-FreeIPAAPIDnszone_Find,Invoke-FreeIPAAPIDnszone_Mod,Invoke-FreeIPAAPIDnszone_Remove_Permission,Invoke-FreeIPAAPIDnszone_Show,Invoke-FreeIPAAPIDns_Is_Enabled,Invoke-FreeIPAAPIDns_Resolve,Invoke-FreeIPAAPIDns_Update_System_Records,Invoke-FreeIPAAPIDomainlevel_Get,Invoke-FreeIPAAPIDomainlevel_Set,Invoke-FreeIPAAPIEnv,Invoke-FreeIPAAPIGroup_Add,Invoke-FreeIPAAPIGroup_Add_Member,Invoke-FreeIPAAPIGroup_Del,Invoke-FreeIPAAPIGroup_Detach,Invoke-FreeIPAAPIGroup_Find,Invoke-FreeIPAAPIGroup_Mod,Invoke-FreeIPAAPIGroup_Remove_Member,Invoke-FreeIPAAPIGroup_Show,Invoke-FreeIPAAPIHbacrule_Add,Invoke-FreeIPAAPIHbacrule_Add_Host,Invoke-FreeIPAAPIHbacrule_Add_Service,Invoke-FreeIPAAPIHbacrule_Add_Sourcehost,Invoke-FreeIPAAPIHbacrule_Add_User,Invoke-FreeIPAAPIHbacrule_Del,Invoke-FreeIPAAPIHbacrule_Disable,Invoke-FreeIPAAPIHbacrule_Enable,Invoke-FreeIPAAPIHbacrule_Find,Invoke-FreeIPAAPIHbacrule_Mod,Invoke-FreeIPAAPIHbacrule_Remove_Host,Invoke-FreeIPAAPIHbacrule_Remove_Service,Invoke-FreeIPAAPIHbacrule_Remove_Sourcehost,Invoke-FreeIPAAPIHbacrule_Remove_User,Invoke-FreeIPAAPIHbacrule_Show,Invoke-FreeIPAAPIHbacsvcgroup_Add,Invoke-FreeIPAAPIHbacsvcgroup_Add_Member,Invoke-FreeIPAAPIHbacsvcgroup_Del,Invoke-FreeIPAAPIHbacsvcgroup_Find,Invoke-FreeIPAAPIHbacsvcgroup_Mod,Invoke-FreeIPAAPIHbacsvcgroup_Remove_Member,Invoke-FreeIPAAPIHbacsvcgroup_Show,Invoke-FreeIPAAPIHbacsvc_Add,Invoke-FreeIPAAPIHbacsvc_Del,Invoke-FreeIPAAPIHbacsvc_Find,Invoke-FreeIPAAPIHbacsvc_Mod,Invoke-FreeIPAAPIHbacsvc_Show,Invoke-FreeIPAAPIHbactest,Invoke-FreeIPAAPIHostgroup_Add,Invoke-FreeIPAAPIHostgroup_Add_Member,Invoke-FreeIPAAPIHostgroup_Del,Invoke-FreeIPAAPIHostgroup_Find,Invoke-FreeIPAAPIHostgroup_Mod,Invoke-FreeIPAAPIHostgroup_Remove_Member,Invoke-FreeIPAAPIHostgroup_Show,Invoke-FreeIPAAPIHost_Add,Invoke-FreeIPAAPIHost_Add_Cert,Invoke-FreeIPAAPIHost_Add_Managedby,Invoke-FreeIPAAPIHost_Add_Principal,Invoke-FreeIPAAPIHost_Allow_Create_Keytab,Invoke-FreeIPAAPIHost_Allow_Retrieve_Keytab,Invoke-FreeIPAAPIHost_Del,Invoke-FreeIPAAPIHost_Disable,Invoke-FreeIPAAPIHost_Disallow_Create_Keytab,Invoke-FreeIPAAPIHost_Disallow_Retrieve_Keytab,Invoke-FreeIPAAPIHost_Find,Invoke-FreeIPAAPIHost_Mod,Invoke-FreeIPAAPIHost_Remove_Cert,Invoke-FreeIPAAPIHost_Remove_Managedby,Invoke-FreeIPAAPIHost_Remove_Principal,Invoke-FreeIPAAPIHost_Show,Invoke-FreeIPAAPII18n_Messages,Invoke-FreeIPAAPIIdoverridegroup_Add,Invoke-FreeIPAAPIIdoverridegroup_Del,Invoke-FreeIPAAPIIdoverridegroup_Find,Invoke-FreeIPAAPIIdoverridegroup_Mod,Invoke-FreeIPAAPIIdoverridegroup_Show,Invoke-FreeIPAAPIIdoverrideuser_Add,Invoke-FreeIPAAPIIdoverrideuser_Add_Cert,Invoke-FreeIPAAPIIdoverrideuser_Del,Invoke-FreeIPAAPIIdoverrideuser_Find,Invoke-FreeIPAAPIIdoverrideuser_Mod,Invoke-FreeIPAAPIIdoverrideuser_Remove_Cert,Invoke-FreeIPAAPIIdoverrideuser_Show,Invoke-FreeIPAAPIIdrange_Add,Invoke-FreeIPAAPIIdrange_Del,Invoke-FreeIPAAPIIdrange_Find,Invoke-FreeIPAAPIIdrange_Mod,Invoke-FreeIPAAPIIdrange_Show,Invoke-FreeIPAAPIIdview_Add,Invoke-FreeIPAAPIIdview_Apply,Invoke-FreeIPAAPIIdview_Del,Invoke-FreeIPAAPIIdview_Find,Invoke-FreeIPAAPIIdview_Mod,Invoke-FreeIPAAPIIdview_Show,Invoke-FreeIPAAPIIdview_Unapply,Invoke-FreeIPAAPIJoin,Invoke-FreeIPAAPIJson_Metadata,Invoke-FreeIPAAPIKra_Is_Enabled,Invoke-FreeIPAAPIKrbtpolicy_Mod,Invoke-FreeIPAAPIKrbtpolicy_Reset,Invoke-FreeIPAAPIKrbtpolicy_Show,Invoke-FreeIPAAPILocation_Add,Invoke-FreeIPAAPILocation_Del,Invoke-FreeIPAAPILocation_Find,Invoke-FreeIPAAPILocation_Mod,Invoke-FreeIPAAPILocation_Show,Invoke-FreeIPAAPIMigrate_Ds,Invoke-FreeIPAAPINetgroup_Add,Invoke-FreeIPAAPINetgroup_Add_Member,Invoke-FreeIPAAPINetgroup_Del,Invoke-FreeIPAAPINetgroup_Find,Invoke-FreeIPAAPINetgroup_Mod,Invoke-FreeIPAAPINetgroup_Remove_Member,Invoke-FreeIPAAPINetgroup_Show,Invoke-FreeIPAAPIOtpconfig_Mod,Invoke-FreeIPAAPIOtpconfig_Show,Invoke-FreeIPAAPIOtptoken_Add,Invoke-FreeIPAAPIOtptoken_Add_Managedby,Invoke-FreeIPAAPIOtptoken_Del,Invoke-FreeIPAAPIOtptoken_Find,Invoke-FreeIPAAPIOtptoken_Mod,Invoke-FreeIPAAPIOtptoken_Remove_Managedby,Invoke-FreeIPAAPIOtptoken_Show,Invoke-FreeIPAAPIOutput_Find,Invoke-FreeIPAAPIOutput_Show,Invoke-FreeIPAAPIParam_Find,Invoke-FreeIPAAPIParam_Show,Invoke-FreeIPAAPIPasswd,Invoke-FreeIPAAPIPermission_Add,Invoke-FreeIPAAPIPermission_Add_Member,Invoke-FreeIPAAPIPermission_Add_Noaci,Invoke-FreeIPAAPIPermission_Del,Invoke-FreeIPAAPIPermission_Find,Invoke-FreeIPAAPIPermission_Mod,Invoke-FreeIPAAPIPermission_Remove_Member,Invoke-FreeIPAAPIPermission_Show,Invoke-FreeIPAAPIPing,Invoke-FreeIPAAPIPkinit_Status,Invoke-FreeIPAAPIPlugins,Invoke-FreeIPAAPIPrivilege_Add,Invoke-FreeIPAAPIPrivilege_Add_Member,Invoke-FreeIPAAPIPrivilege_Add_Permission,Invoke-FreeIPAAPIPrivilege_Del,Invoke-FreeIPAAPIPrivilege_Find,Invoke-FreeIPAAPIPrivilege_Mod,Invoke-FreeIPAAPIPrivilege_Remove_Member,Invoke-FreeIPAAPIPrivilege_Remove_Permission,Invoke-FreeIPAAPIPrivilege_Show,Invoke-FreeIPAAPIPwpolicy_Add,Invoke-FreeIPAAPIPwpolicy_Del,Invoke-FreeIPAAPIPwpolicy_Find,Invoke-FreeIPAAPIPwpolicy_Mod,Invoke-FreeIPAAPIPwpolicy_Show,Invoke-FreeIPAAPIRadiusproxy_Add,Invoke-FreeIPAAPIRadiusproxy_Del,Invoke-FreeIPAAPIRadiusproxy_Find,Invoke-FreeIPAAPIRadiusproxy_Mod,Invoke-FreeIPAAPIRadiusproxy_Show,Invoke-FreeIPAAPIRealmdomains_Mod,Invoke-FreeIPAAPIRealmdomains_Show,Invoke-FreeIPAAPIRole_Add,Invoke-FreeIPAAPIRole_Add_Member,Invoke-FreeIPAAPIRole_Add_Privilege,Invoke-FreeIPAAPIRole_Del,Invoke-FreeIPAAPIRole_Find,Invoke-FreeIPAAPIRole_Mod,Invoke-FreeIPAAPIRole_Remove_Member,Invoke-FreeIPAAPIRole_Remove_Privilege,Invoke-FreeIPAAPIRole_Show,Invoke-FreeIPAAPISchema,Invoke-FreeIPAAPISelfservice_Add,Invoke-FreeIPAAPISelfservice_Del,Invoke-FreeIPAAPISelfservice_Find,Invoke-FreeIPAAPISelfservice_Mod,Invoke-FreeIPAAPISelfservice_Show,Invoke-FreeIPAAPISelinuxusermap_Add,Invoke-FreeIPAAPISelinuxusermap_Add_Host,Invoke-FreeIPAAPISelinuxusermap_Add_User,Invoke-FreeIPAAPISelinuxusermap_Del,Invoke-FreeIPAAPISelinuxusermap_Disable,Invoke-FreeIPAAPISelinuxusermap_Enable,Invoke-FreeIPAAPISelinuxusermap_Find,Invoke-FreeIPAAPISelinuxusermap_Mod,Invoke-FreeIPAAPISelinuxusermap_Remove_Host,Invoke-FreeIPAAPISelinuxusermap_Remove_User,Invoke-FreeIPAAPISelinuxusermap_Show,Invoke-FreeIPAAPIServer_Conncheck,Invoke-FreeIPAAPIServer_Del,Invoke-FreeIPAAPIServer_Find,Invoke-FreeIPAAPIServer_Mod,Invoke-FreeIPAAPIServer_Role_Find,Invoke-FreeIPAAPIServer_Role_Show,Invoke-FreeIPAAPIServer_Show,Invoke-FreeIPAAPIServicedelegationrule_Add,Invoke-FreeIPAAPIServicedelegationrule_Add_Member,Invoke-FreeIPAAPIServicedelegationrule_Add_Target,Invoke-FreeIPAAPIServicedelegationrule_Del,Invoke-FreeIPAAPIServicedelegationrule_Find,Invoke-FreeIPAAPIServicedelegationrule_Remove_Member,Invoke-FreeIPAAPIServicedelegationrule_Remove_Target,Invoke-FreeIPAAPIServicedelegationrule_Show,Invoke-FreeIPAAPIServicedelegationtarget_Add,Invoke-FreeIPAAPIServicedelegationtarget_Add_Member,Invoke-FreeIPAAPIServicedelegationtarget_Del,Invoke-FreeIPAAPIServicedelegationtarget_Find,Invoke-FreeIPAAPIServicedelegationtarget_Remove_Member,Invoke-FreeIPAAPIServicedelegationtarget_Show,Invoke-FreeIPAAPIService_Add,Invoke-FreeIPAAPIService_Add_Cert,Invoke-FreeIPAAPIService_Add_Host,Invoke-FreeIPAAPIService_Add_Principal,Invoke-FreeIPAAPIService_Allow_Create_Keytab,Invoke-FreeIPAAPIService_Allow_Retrieve_Keytab,Invoke-FreeIPAAPIService_Del,Invoke-FreeIPAAPIService_Disable,Invoke-FreeIPAAPIService_Disallow_Create_Keytab,Invoke-FreeIPAAPIService_Disallow_Retrieve_Keytab,Invoke-FreeIPAAPIService_Find,Invoke-FreeIPAAPIService_Mod,Invoke-FreeIPAAPIService_Remove_Cert,Invoke-FreeIPAAPIService_Remove_Host,Invoke-FreeIPAAPIService_Remove_Principal,Invoke-FreeIPAAPIService_Show,Invoke-FreeIPAAPISession_Logout,Invoke-FreeIPAAPISidgen_Was_Run,Invoke-FreeIPAAPIStageuser_Activate,Invoke-FreeIPAAPIStageuser_Add,Invoke-FreeIPAAPIStageuser_Add_Cert,Invoke-FreeIPAAPIStageuser_Add_Certmapdata,Invoke-FreeIPAAPIStageuser_Add_Manager,Invoke-FreeIPAAPIStageuser_Add_Principal,Invoke-FreeIPAAPIStageuser_Del,Invoke-FreeIPAAPIStageuser_Find,Invoke-FreeIPAAPIStageuser_Mod,Invoke-FreeIPAAPIStageuser_Remove_Cert,Invoke-FreeIPAAPIStageuser_Remove_Certmapdata,Invoke-FreeIPAAPIStageuser_Remove_Manager,Invoke-FreeIPAAPIStageuser_Remove_Principal,Invoke-FreeIPAAPIStageuser_Show,Invoke-FreeIPAAPISudocmdgroup_Add,Invoke-FreeIPAAPISudocmdgroup_Add_Member,Invoke-FreeIPAAPISudocmdgroup_Del,Invoke-FreeIPAAPISudocmdgroup_Find,Invoke-FreeIPAAPISudocmdgroup_Mod,Invoke-FreeIPAAPISudocmdgroup_Remove_Member,Invoke-FreeIPAAPISudocmdgroup_Show,Invoke-FreeIPAAPISudocmd_Add,Invoke-FreeIPAAPISudocmd_Del,Invoke-FreeIPAAPISudocmd_Find,Invoke-FreeIPAAPISudocmd_Mod,Invoke-FreeIPAAPISudocmd_Show,Invoke-FreeIPAAPISudorule_Add,Invoke-FreeIPAAPISudorule_Add_Allow_Command,Invoke-FreeIPAAPISudorule_Add_Deny_Command,Invoke-FreeIPAAPISudorule_Add_Host,Invoke-FreeIPAAPISudorule_Add_Option,Invoke-FreeIPAAPISudorule_Add_Runasgroup,Invoke-FreeIPAAPISudorule_Add_Runasuser,Invoke-FreeIPAAPISudorule_Add_User,Invoke-FreeIPAAPISudorule_Del,Invoke-FreeIPAAPISudorule_Disable,Invoke-FreeIPAAPISudorule_Enable,Invoke-FreeIPAAPISudorule_Find,Invoke-FreeIPAAPISudorule_Mod,Invoke-FreeIPAAPISudorule_Remove_Allow_Command,Invoke-FreeIPAAPISudorule_Remove_Deny_Command,Invoke-FreeIPAAPISudorule_Remove_Host,Invoke-FreeIPAAPISudorule_Remove_Option,Invoke-FreeIPAAPISudorule_Remove_Runasgroup,Invoke-FreeIPAAPISudorule_Remove_Runasuser,Invoke-FreeIPAAPISudorule_Remove_User,Invoke-FreeIPAAPISudorule_Show,Invoke-FreeIPAAPITopic_Find,Invoke-FreeIPAAPITopic_Show,Invoke-FreeIPAAPITopologysegment_Add,Invoke-FreeIPAAPITopologysegment_Del,Invoke-FreeIPAAPITopologysegment_Find,Invoke-FreeIPAAPITopologysegment_Mod,Invoke-FreeIPAAPITopologysegment_Reinitialize,Invoke-FreeIPAAPITopologysegment_Show,Invoke-FreeIPAAPITopologysuffix_Add,Invoke-FreeIPAAPITopologysuffix_Del,Invoke-FreeIPAAPITopologysuffix_Find,Invoke-FreeIPAAPITopologysuffix_Mod,Invoke-FreeIPAAPITopologysuffix_Show,Invoke-FreeIPAAPITopologysuffix_Verify,Invoke-FreeIPAAPITrustconfig_Mod,Invoke-FreeIPAAPITrustconfig_Show,Invoke-FreeIPAAPITrustdomain_Add,Invoke-FreeIPAAPITrustdomain_Del,Invoke-FreeIPAAPITrustdomain_Disable,Invoke-FreeIPAAPITrustdomain_Enable,Invoke-FreeIPAAPITrustdomain_Find,Invoke-FreeIPAAPITrustdomain_Mod,Invoke-FreeIPAAPITrust_Add,Invoke-FreeIPAAPITrust_Del,Invoke-FreeIPAAPITrust_Fetch_Domains,Invoke-FreeIPAAPITrust_Find,Invoke-FreeIPAAPITrust_Mod,Invoke-FreeIPAAPITrust_Resolve,Invoke-FreeIPAAPITrust_Show,Invoke-FreeIPAAPIUser_Add,Invoke-FreeIPAAPIUser_Add_Cert,Invoke-FreeIPAAPIUser_Add_Certmapdata,Invoke-FreeIPAAPIUser_Add_Manager,Invoke-FreeIPAAPIUser_Add_Principal,Invoke-FreeIPAAPIUser_Del,Invoke-FreeIPAAPIUser_Disable,Invoke-FreeIPAAPIUser_Enable,Invoke-FreeIPAAPIUser_Find,Invoke-FreeIPAAPIUser_Mod,Invoke-FreeIPAAPIUser_Remove_Cert,Invoke-FreeIPAAPIUser_Remove_Certmapdata,Invoke-FreeIPAAPIUser_Remove_Manager,Invoke-FreeIPAAPIUser_Remove_Principal,Invoke-FreeIPAAPIUser_Show,Invoke-FreeIPAAPIUser_Stage,Invoke-FreeIPAAPIUser_Status,Invoke-FreeIPAAPIUser_Undel,Invoke-FreeIPAAPIUser_Unlock,Invoke-FreeIPAAPIVaultconfig_Show,Invoke-FreeIPAAPIVaultcontainer_Add_Owner,Invoke-FreeIPAAPIVaultcontainer_Del,Invoke-FreeIPAAPIVaultcontainer_Remove_Owner,Invoke-FreeIPAAPIVaultcontainer_Show,Invoke-FreeIPAAPIVault_Add_Internal,Invoke-FreeIPAAPIVault_Add_Member,Invoke-FreeIPAAPIVault_Add_Owner,Invoke-FreeIPAAPIVault_Archive_Internal,Invoke-FreeIPAAPIVault_Del,Invoke-FreeIPAAPIVault_Find,Invoke-FreeIPAAPIVault_Mod_Internal,Invoke-FreeIPAAPIVault_Remove_Member,Invoke-FreeIPAAPIVault_Remove_Owner,Invoke-FreeIPAAPIVault_Retrieve_Internal,Invoke-FreeIPAAPIVault_Show,Invoke-FreeIPAAPIWhoami,Set-FreeIPAAPICredentials,Import-FreeIPAAPICrendentials,Set-FreeIPAAPIServerConfig,Get-FreeIPAAPIAuthenticationCookie
-Export-ModuleMember -Alias Add-IPAAci,Remove-IPAAci,Find-IPAAci,Set-IPAAci,Rename-IPAAci,Show-IPAAci,Test-IPAAdtrustEnabled,Add-IPAAutomember,Add-IPAAutomemberCondition,remove-IPAAutomemberDefaultGroup,set-IPAAutomemberDefaultGroup,show-IPAAutomemberDefaultGroup,Remove-IPAAutomember,Find-IPAAutomember,Set-IPAAutomember,Build-IPAAutomember,Remove-IPAAutomemberCondition,Show-IPAAutomember,Add-IPAAutomountkey,Remove-IPAAutomountkey,Find-IPAAutomountkey,Set-IPAAutomountkey,Show-IPAAutomountkey,Add-IPAAutomountlocation,Remove-IPAAutomountlocation,Find-IPAAutomountlocation,Show-IPAAutomountlocation,Build-IPAFilesAutomountlocation,Add-IPAAutomountmap,Add-IPAAutomountmapIndirect,Remove-IPAAutomountmap,Find-IPAAutomountmap,Set-IPAAutomountmap,Show-IPAAutomountmap,Use-IPABatch,Add-IPACaacl,Add-IPACaaclCa,Add-IPACaaclHost,Add-IPACaaclProfile,Add-IPACaaclService,Add-IPACaaclUser,Remove-IPACaacl,Disable-IPACaacl,Enable-IPACaacl,Find-IPACaacl,Set-IPACaacl,Remove-IPACaaclCa,Remove-IPACaaclHost,Remove-IPACaaclProfile,Remove-IPACaaclService,Remove-IPACaaclUser,Show-IPACaacl,Add-IPACa,Remove-IPACa,Disable-IPACa,Enable-IPACa,Find-IPACa,Test-IPACaEnabled,Set-IPACa,Show-IPACa,Set-IPACertmapconfig,Show-IPACertmapconfig,Add-IPACertmaprule,Remove-IPACertmaprule,Disable-IPACertmaprule,Enable-IPACertmaprule,Find-IPACertmaprule,Set-IPACertmaprule,Show-IPACertmaprule,Search-IPAMatchCertmap,Remove-IPACertprofile,Find-IPACertprofile,Import-IPACertprofile,Set-IPACertprofile,Show-IPACertprofile,Find-IPACert,Remove-IPACertHold,Request-IPACert,Revoke-IPACert,Show-IPACert,Get-IPAStatusCert,Find-IPAClass,Show-IPAClass,Get-IPADefaultsDefaults,Find-IPACommand,Show-IPACommand,Test-IPACompatEnabled,Set-IPAConfig,Show-IPAConfig,Add-IPACosentry,Remove-IPACosentry,Find-IPACosentry,Set-IPACosentry,Show-IPACosentry,Add-IPADelegation,Remove-IPADelegation,Find-IPADelegation,Set-IPADelegation,Show-IPADelegation,Set-IPADnsconfig,Show-IPADnsconfig,Add-IPADnsforwardzone,Add-IPADnsforwardzonePermission,Remove-IPADnsforwardzone,Disable-IPADnsforwardzone,Enable-IPADnsforwardzone,Find-IPADnsforwardzone,Set-IPADnsforwardzone,Remove-IPADnsforwardzonePermission,Show-IPADnsforwardzone,Add-IPADnsrecord,Remove-IPADnsrecord,Remove-IPADnsrecordEntry,Find-IPADnsrecord,Set-IPADnsrecord,Show-IPADnsrecord,Split-IPADnsrecordParts,Find-IPADnsserver,Set-IPADnsserver,Show-IPADnsserver,Add-IPADnszone,Add-IPADnszonePermission,Remove-IPADnszone,Disable-IPADnszone,Enable-IPADnszone,Find-IPADnszone,Set-IPADnszone,Remove-IPADnszonePermission,Show-IPADnszone,Test-IPADnsEnabled,Resolve-IPADns,Update-IPADnsSystemRecords,Get-IPADomainlevel,Set-IPADomainlevel,Use-IPAEnv,Add-IPAGroup,Add-IPAGroupMember,Remove-IPAGroup,Remove-IPAManagedGroup,Find-IPAGroup,Set-IPAGroup,Remove-IPAGroupMember,Show-IPAGroup,Add-IPAHbacrule,Add-IPAHbacruleHost,Add-IPAHbacruleService,Add-IPAHbacruleSourcehost,Add-IPAHbacruleUser,Remove-IPAHbacrule,Disable-IPAHbacrule,Enable-IPAHbacrule,Find-IPAHbacrule,Set-IPAHbacrule,Remove-IPAHbacruleHost,Remove-IPAHbacruleService,Remove-IPAHbacruleSourcehost,Remove-IPAHbacruleUser,Show-IPAHbacrule,Add-IPAHbacsvcgroup,Add-IPAHbacsvcgroupMember,Remove-IPAHbacsvcgroup,Find-IPAHbacsvcgroup,Set-IPAHbacsvcgroup,Remove-IPAHbacsvcgroupMember,Show-IPAHbacsvcgroup,Add-IPAHbacsvc,Remove-IPAHbacsvc,Find-IPAHbacsvc,Set-IPAHbacsvc,Show-IPAHbacsvc,Use-IPAHbactest,Add-IPAHostgroup,Add-IPAHostgroupMember,Remove-IPAHostgroup,Find-IPAHostgroup,Set-IPAHostgroup,Remove-IPAHostgroupMember,Show-IPAHostgroup,Add-IPAHost,Add-IPAHostCert,Add-IPAHostManagedby,Add-IPAHostPrincipal,Approve-IPAHostCreateKeytab,Approve-IPAHostRetrieveKeytab,Remove-IPAHost,Disable-IPAHost,Deny-IPAHostCreateKeytab,Deny-IPAHostRetrieveKeytab,Find-IPAHost,Set-IPAHost,Remove-IPAHostCert,Remove-IPAHostManagedby,Remove-IPAHostPrincipal,Show-IPAHost,Get-IPAMessagesI18n,Add-IPAIdoverridegroup,Remove-IPAIdoverridegroup,Find-IPAIdoverridegroup,Set-IPAIdoverridegroup,Show-IPAIdoverridegroup,Add-IPAIdoverrideuser,Add-IPAIdoverrideuserCert,Remove-IPAIdoverrideuser,Find-IPAIdoverrideuser,Set-IPAIdoverrideuser,Remove-IPAIdoverrideuserCert,Show-IPAIdoverrideuser,Add-IPAIdrange,Remove-IPAIdrange,Find-IPAIdrange,Set-IPAIdrange,Show-IPAIdrange,Add-IPAIdview,Publish-IPAIdview,Remove-IPAIdview,Find-IPAIdview,Set-IPAIdview,Show-IPAIdview,Undo-IPAIdview,Use-IPAJoin,Get-IPAMetadata,Test-IPAKraEnabled,Set-IPAKrbtpolicy,Reset-IPAKrbtpolicy,Show-IPAKrbtpolicy,Add-IPALocation,Remove-IPALocation,Find-IPALocation,Set-IPALocation,Show-IPALocation,Do-IPADsMigrate,Add-IPANetgroup,Add-IPANetgroupMember,Remove-IPANetgroup,Find-IPANetgroup,Set-IPANetgroup,Remove-IPANetgroupMember,Show-IPANetgroup,Set-IPAOtpconfig,Show-IPAOtpconfig,Add-IPAOtptoken,Add-IPAOtptokenManagedby,Remove-IPAOtptoken,Find-IPAOtptoken,Set-IPAOtptoken,Remove-IPAOtptokenManagedby,Show-IPAOtptoken,Find-IPAOutput,Show-IPAOutput,Find-IPAParam,Show-IPAParam,Use-IPAPasswd,Add-IPAPermission,Add-IPAPermissionMember,Add-IPAPermissionNoaci,Remove-IPAPermission,Find-IPAPermission,Set-IPAPermission,Remove-IPAPermissionMember,Show-IPAPermission,Use-IPAPing,Get-IPAStatusPkinit,Use-IPAPlugins,Add-IPAPrivilege,Add-IPAPrivilegeMember,Add-IPAPrivilegePermission,Remove-IPAPrivilege,Find-IPAPrivilege,Set-IPAPrivilege,Remove-IPAPrivilegeMember,Remove-IPAPrivilegePermission,Show-IPAPrivilege,Add-IPAPwpolicy,Remove-IPAPwpolicy,Find-IPAPwpolicy,Set-IPAPwpolicy,Show-IPAPwpolicy,Add-IPARadiusproxy,Remove-IPARadiusproxy,Find-IPARadiusproxy,Set-IPARadiusproxy,Show-IPARadiusproxy,Set-IPARealmdomains,Show-IPARealmdomains,Add-IPARole,Add-IPARoleMember,Add-IPARolePrivilege,Remove-IPARole,Find-IPARole,Set-IPARole,Remove-IPARoleMember,Remove-IPARolePrivilege,Show-IPARole,Use-IPASchema,Add-IPASelfservice,Remove-IPASelfservice,Find-IPASelfservice,Set-IPASelfservice,Show-IPASelfservice,Add-IPASelinuxusermap,Add-IPASelinuxusermapHost,Add-IPASelinuxusermapUser,Remove-IPASelinuxusermap,Disable-IPASelinuxusermap,Enable-IPASelinuxusermap,Find-IPASelinuxusermap,Set-IPASelinuxusermap,Remove-IPASelinuxusermapHost,Remove-IPASelinuxusermapUser,Show-IPASelinuxusermap,Test-IPAConnection,Remove-IPAServer,Find-IPAServer,Set-IPAServer,Find-IPAServerRole,Show-IPAServerRole,Show-IPAServer,Add-IPAServicedelegationrule,Add-IPAServicedelegationruleMember,Add-IPAServicedelegationruleTarget,Remove-IPAServicedelegationrule,Find-IPAServicedelegationrule,Remove-IPAServicedelegationruleMember,Remove-IPAServicedelegationruleTarget,Show-IPAServicedelegationrule,Add-IPAServicedelegationtarget,Add-IPAServicedelegationtargetMember,Remove-IPAServicedelegationtarget,Find-IPAServicedelegationtarget,Remove-IPAServicedelegationtargetMember,Show-IPAServicedelegationtarget,Add-IPAService,Add-IPAServiceCert,Add-IPAServiceHost,Add-IPAServicePrincipal,Approve-IPAServiceCreateKeytab,Approve-IPAServiceRetrieveKeytab,Remove-IPAService,Disable-IPAService,Deny-IPAServiceCreateKeytab,Deny-IPAServiceRetrieveKeytab,Find-IPAService,Set-IPAService,Remove-IPAServiceCert,Remove-IPAServiceHost,Remove-IPAServicePrincipal,Show-IPAService,Disconnect-IPA,Get-IPAStatusSidgenRun,Enable-IPAStageuser,Add-IPAStageuser,Add-IPAStageuserCert,Add-IPAStageuserCertmapdata,Add-IPAStageuserManager,Add-IPAStageuserPrincipal,Remove-IPAStageuser,Find-IPAStageuser,Set-IPAStageuser,Remove-IPAStageuserCert,Remove-IPAStageuserCertmapdata,Remove-IPAStageuserManager,Remove-IPAStageuserPrincipal,Show-IPAStageuser,Add-IPASudocmdgroup,Add-IPASudocmdgroupMember,Remove-IPASudocmdgroup,Find-IPASudocmdgroup,Set-IPASudocmdgroup,Remove-IPASudocmdgroupMember,Show-IPASudocmdgroup,Add-IPASudocmd,Remove-IPASudocmd,Find-IPASudocmd,Set-IPASudocmd,Show-IPASudocmd,Add-IPASudorule,Add-IPASudoruleAllowCommand,Add-IPASudoruleDenyCommand,Add-IPASudoruleHost,Add-IPASudoruleOption,Add-IPASudoruleRunasgroup,Add-IPASudoruleRunasuser,Add-IPASudoruleUser,Remove-IPASudorule,Disable-IPASudorule,Enable-IPASudorule,Find-IPASudorule,Set-IPASudorule,Remove-IPASudoruleAllowCommand,Remove-IPASudoruleDenyCommand,Remove-IPASudoruleHost,Remove-IPASudoruleOption,Remove-IPASudoruleRunasgroup,Remove-IPASudoruleRunasuser,Remove-IPASudoruleUser,Show-IPASudorule,Find-IPATopic,Show-IPATopic,Add-IPATopologysegment,Remove-IPATopologysegment,Find-IPATopologysegment,Set-IPATopologysegment,Initialize-IPATopologysegment,Show-IPATopologysegment,Add-IPATopologysuffix,Remove-IPATopologysuffix,Find-IPATopologysuffix,Set-IPATopologysuffix,Show-IPATopologysuffix,Confirm-IPATopologysuffix,Set-IPATrustconfig,Show-IPATrustconfig,Add-IPATrustdomain,Remove-IPATrustdomain,Disable-IPATrustdomain,Enable-IPATrustdomain,Find-IPATrustdomain,Set-IPATrustdomain,Add-IPATrust,Remove-IPATrust,Build-IPATrustDomains,Find-IPATrust,Set-IPATrust,Resolve-IPATrust,Show-IPATrust,Add-IPAUser,Add-IPAUserCert,Add-IPAUserCertmapdata,Add-IPAUserManager,Add-IPAUserPrincipal,Remove-IPAUser,Disable-IPAUser,Enable-IPAUser,Find-IPAUser,Set-IPAUser,Remove-IPAUserCert,Remove-IPAUserCertmapdata,Remove-IPAUserManager,Remove-IPAUserPrincipal,Show-IPAUser,Move-IPADelToStageUser,Get-IPAStatusUser,Restore-IPAUser,Unlock-IPAUser,Show-IPAVaultconfig,Add-IPAVaultcontainerOwner,Remove-IPAVaultcontainer,Remove-IPAVaultcontainerOwner,Show-IPAVaultcontainer,Add-IPAVaultInternal,Add-IPAVaultMember,Add-IPAVaultOwner,Move-IPAToArchiveVaultInternal,Remove-IPAVault,Find-IPAVault,Set-IPAVaultInternal,Remove-IPAVaultMember,Remove-IPAVaultOwner,Get-IPAVaultInternal,Show-IPAVault,Use-IPAWhoami,Set-IPACredentials,Import-IPACrendentials,Set-IPAServerConfig,Connect-IPA
+New-Alias -Name Set-IPAProxy -value Set-FreeIPAProxy -Description "Set a web proxy to be used to connect your FreeIPA server APIs"
+Export-ModuleMember -Function Invoke-FreeIPAAPIAci_Add,Invoke-FreeIPAAPIAci_Del,Invoke-FreeIPAAPIAci_Find,Invoke-FreeIPAAPIAci_Mod,Invoke-FreeIPAAPIAci_Rename,Invoke-FreeIPAAPIAci_Show,Invoke-FreeIPAAPIAdtrust_Is_Enabled,Invoke-FreeIPAAPIAutomember_Add,Invoke-FreeIPAAPIAutomember_Add_Condition,Invoke-FreeIPAAPIAutomember_Default_Group_Remove,Invoke-FreeIPAAPIAutomember_Default_Group_Set,Invoke-FreeIPAAPIAutomember_Default_Group_Show,Invoke-FreeIPAAPIAutomember_Del,Invoke-FreeIPAAPIAutomember_Find,Invoke-FreeIPAAPIAutomember_Find_Orphans,Invoke-FreeIPAAPIAutomember_Mod,Invoke-FreeIPAAPIAutomember_Rebuild,Invoke-FreeIPAAPIAutomember_Remove_Condition,Invoke-FreeIPAAPIAutomember_Show,Invoke-FreeIPAAPIAutomountkey_Add,Invoke-FreeIPAAPIAutomountkey_Del,Invoke-FreeIPAAPIAutomountkey_Find,Invoke-FreeIPAAPIAutomountkey_Mod,Invoke-FreeIPAAPIAutomountkey_Show,Invoke-FreeIPAAPIAutomountlocation_Add,Invoke-FreeIPAAPIAutomountlocation_Del,Invoke-FreeIPAAPIAutomountlocation_Find,Invoke-FreeIPAAPIAutomountlocation_Show,Invoke-FreeIPAAPIAutomountlocation_Tofiles,Invoke-FreeIPAAPIAutomountmap_Add,Invoke-FreeIPAAPIAutomountmap_Add_Indirect,Invoke-FreeIPAAPIAutomountmap_Del,Invoke-FreeIPAAPIAutomountmap_Find,Invoke-FreeIPAAPIAutomountmap_Mod,Invoke-FreeIPAAPIAutomountmap_Show,Invoke-FreeIPAAPIBatch,Invoke-FreeIPAAPICaacl_Add,Invoke-FreeIPAAPICaacl_Add_Ca,Invoke-FreeIPAAPICaacl_Add_Host,Invoke-FreeIPAAPICaacl_Add_Profile,Invoke-FreeIPAAPICaacl_Add_Service,Invoke-FreeIPAAPICaacl_Add_User,Invoke-FreeIPAAPICaacl_Del,Invoke-FreeIPAAPICaacl_Disable,Invoke-FreeIPAAPICaacl_Enable,Invoke-FreeIPAAPICaacl_Find,Invoke-FreeIPAAPICaacl_Mod,Invoke-FreeIPAAPICaacl_Remove_Ca,Invoke-FreeIPAAPICaacl_Remove_Host,Invoke-FreeIPAAPICaacl_Remove_Profile,Invoke-FreeIPAAPICaacl_Remove_Service,Invoke-FreeIPAAPICaacl_Remove_User,Invoke-FreeIPAAPICaacl_Show,Invoke-FreeIPAAPICa_Add,Invoke-FreeIPAAPICa_Del,Invoke-FreeIPAAPICa_Disable,Invoke-FreeIPAAPICa_Enable,Invoke-FreeIPAAPICa_Find,Invoke-FreeIPAAPICa_Is_Enabled,Invoke-FreeIPAAPICa_Mod,Invoke-FreeIPAAPICa_Show,Invoke-FreeIPAAPICertmapconfig_Mod,Invoke-FreeIPAAPICertmapconfig_Show,Invoke-FreeIPAAPICertmaprule_Add,Invoke-FreeIPAAPICertmaprule_Del,Invoke-FreeIPAAPICertmaprule_Disable,Invoke-FreeIPAAPICertmaprule_Enable,Invoke-FreeIPAAPICertmaprule_Find,Invoke-FreeIPAAPICertmaprule_Mod,Invoke-FreeIPAAPICertmaprule_Show,Invoke-FreeIPAAPICertmap_Match,Invoke-FreeIPAAPICertprofile_Del,Invoke-FreeIPAAPICertprofile_Find,Invoke-FreeIPAAPICertprofile_Import,Invoke-FreeIPAAPICertprofile_Mod,Invoke-FreeIPAAPICertprofile_Show,Invoke-FreeIPAAPICert_Find,Invoke-FreeIPAAPICert_Remove_Hold,Invoke-FreeIPAAPICert_Request,Invoke-FreeIPAAPICert_Revoke,Invoke-FreeIPAAPICert_Show,Invoke-FreeIPAAPICert_Status,Invoke-FreeIPAAPIClass_Find,Invoke-FreeIPAAPIClass_Show,Invoke-FreeIPAAPICommand_Defaults,Invoke-FreeIPAAPICommand_Find,Invoke-FreeIPAAPICommand_Show,Invoke-FreeIPAAPICompat_Is_Enabled,Invoke-FreeIPAAPIConfig_Mod,Invoke-FreeIPAAPIConfig_Show,Invoke-FreeIPAAPICosentry_Add,Invoke-FreeIPAAPICosentry_Del,Invoke-FreeIPAAPICosentry_Find,Invoke-FreeIPAAPICosentry_Mod,Invoke-FreeIPAAPICosentry_Show,Invoke-FreeIPAAPIDelegation_Add,Invoke-FreeIPAAPIDelegation_Del,Invoke-FreeIPAAPIDelegation_Find,Invoke-FreeIPAAPIDelegation_Mod,Invoke-FreeIPAAPIDelegation_Show,Invoke-FreeIPAAPIDnsconfig_Mod,Invoke-FreeIPAAPIDnsconfig_Show,Invoke-FreeIPAAPIDnsforwardzone_Add,Invoke-FreeIPAAPIDnsforwardzone_Add_Permission,Invoke-FreeIPAAPIDnsforwardzone_Del,Invoke-FreeIPAAPIDnsforwardzone_Disable,Invoke-FreeIPAAPIDnsforwardzone_Enable,Invoke-FreeIPAAPIDnsforwardzone_Find,Invoke-FreeIPAAPIDnsforwardzone_Mod,Invoke-FreeIPAAPIDnsforwardzone_Remove_Permission,Invoke-FreeIPAAPIDnsforwardzone_Show,Invoke-FreeIPAAPIDnsrecord_Add,Invoke-FreeIPAAPIDnsrecord_Del,Invoke-FreeIPAAPIDnsrecord_Delentry,Invoke-FreeIPAAPIDnsrecord_Find,Invoke-FreeIPAAPIDnsrecord_Mod,Invoke-FreeIPAAPIDnsrecord_Show,Invoke-FreeIPAAPIDnsrecord_Split_Parts,Invoke-FreeIPAAPIDnsserver_Find,Invoke-FreeIPAAPIDnsserver_Mod,Invoke-FreeIPAAPIDnsserver_Show,Invoke-FreeIPAAPIDnszone_Add,Invoke-FreeIPAAPIDnszone_Add_Permission,Invoke-FreeIPAAPIDnszone_Del,Invoke-FreeIPAAPIDnszone_Disable,Invoke-FreeIPAAPIDnszone_Enable,Invoke-FreeIPAAPIDnszone_Find,Invoke-FreeIPAAPIDnszone_Mod,Invoke-FreeIPAAPIDnszone_Remove_Permission,Invoke-FreeIPAAPIDnszone_Show,Invoke-FreeIPAAPIDns_Is_Enabled,Invoke-FreeIPAAPIDns_Resolve,Invoke-FreeIPAAPIDns_Update_System_Records,Invoke-FreeIPAAPIDomainlevel_Get,Invoke-FreeIPAAPIDomainlevel_Set,Invoke-FreeIPAAPIEnv,Invoke-FreeIPAAPIGroup_Add,Invoke-FreeIPAAPIGroup_Add_Member,Invoke-FreeIPAAPIGroup_Add_Member_Manager,Invoke-FreeIPAAPIGroup_Del,Invoke-FreeIPAAPIGroup_Detach,Invoke-FreeIPAAPIGroup_Find,Invoke-FreeIPAAPIGroup_Mod,Invoke-FreeIPAAPIGroup_Remove_Member,Invoke-FreeIPAAPIGroup_Remove_Member_Manager,Invoke-FreeIPAAPIGroup_Show,Invoke-FreeIPAAPIHbacrule_Add,Invoke-FreeIPAAPIHbacrule_Add_Host,Invoke-FreeIPAAPIHbacrule_Add_Service,Invoke-FreeIPAAPIHbacrule_Add_Sourcehost,Invoke-FreeIPAAPIHbacrule_Add_User,Invoke-FreeIPAAPIHbacrule_Del,Invoke-FreeIPAAPIHbacrule_Disable,Invoke-FreeIPAAPIHbacrule_Enable,Invoke-FreeIPAAPIHbacrule_Find,Invoke-FreeIPAAPIHbacrule_Mod,Invoke-FreeIPAAPIHbacrule_Remove_Host,Invoke-FreeIPAAPIHbacrule_Remove_Service,Invoke-FreeIPAAPIHbacrule_Remove_Sourcehost,Invoke-FreeIPAAPIHbacrule_Remove_User,Invoke-FreeIPAAPIHbacrule_Show,Invoke-FreeIPAAPIHbacsvcgroup_Add,Invoke-FreeIPAAPIHbacsvcgroup_Add_Member,Invoke-FreeIPAAPIHbacsvcgroup_Del,Invoke-FreeIPAAPIHbacsvcgroup_Find,Invoke-FreeIPAAPIHbacsvcgroup_Mod,Invoke-FreeIPAAPIHbacsvcgroup_Remove_Member,Invoke-FreeIPAAPIHbacsvcgroup_Show,Invoke-FreeIPAAPIHbacsvc_Add,Invoke-FreeIPAAPIHbacsvc_Del,Invoke-FreeIPAAPIHbacsvc_Find,Invoke-FreeIPAAPIHbacsvc_Mod,Invoke-FreeIPAAPIHbacsvc_Show,Invoke-FreeIPAAPIHbactest,Invoke-FreeIPAAPIHostgroup_Add,Invoke-FreeIPAAPIHostgroup_Add_Member,Invoke-FreeIPAAPIHostgroup_Add_Member_Manager,Invoke-FreeIPAAPIHostgroup_Del,Invoke-FreeIPAAPIHostgroup_Find,Invoke-FreeIPAAPIHostgroup_Mod,Invoke-FreeIPAAPIHostgroup_Remove_Member,Invoke-FreeIPAAPIHostgroup_Remove_Member_Manager,Invoke-FreeIPAAPIHostgroup_Show,Invoke-FreeIPAAPIHost_Add,Invoke-FreeIPAAPIHost_Add_Cert,Invoke-FreeIPAAPIHost_Add_Managedby,Invoke-FreeIPAAPIHost_Add_Principal,Invoke-FreeIPAAPIHost_Allow_Create_Keytab,Invoke-FreeIPAAPIHost_Allow_Retrieve_Keytab,Invoke-FreeIPAAPIHost_Del,Invoke-FreeIPAAPIHost_Disable,Invoke-FreeIPAAPIHost_Disallow_Create_Keytab,Invoke-FreeIPAAPIHost_Disallow_Retrieve_Keytab,Invoke-FreeIPAAPIHost_Find,Invoke-FreeIPAAPIHost_Mod,Invoke-FreeIPAAPIHost_Remove_Cert,Invoke-FreeIPAAPIHost_Remove_Managedby,Invoke-FreeIPAAPIHost_Remove_Principal,Invoke-FreeIPAAPIHost_Show,Invoke-FreeIPAAPII18n_Messages,Invoke-FreeIPAAPIIdoverridegroup_Add,Invoke-FreeIPAAPIIdoverridegroup_Del,Invoke-FreeIPAAPIIdoverridegroup_Find,Invoke-FreeIPAAPIIdoverridegroup_Mod,Invoke-FreeIPAAPIIdoverridegroup_Show,Invoke-FreeIPAAPIIdoverrideuser_Add,Invoke-FreeIPAAPIIdoverrideuser_Add_Cert,Invoke-FreeIPAAPIIdoverrideuser_Del,Invoke-FreeIPAAPIIdoverrideuser_Find,Invoke-FreeIPAAPIIdoverrideuser_Mod,Invoke-FreeIPAAPIIdoverrideuser_Remove_Cert,Invoke-FreeIPAAPIIdoverrideuser_Show,Invoke-FreeIPAAPIIdrange_Add,Invoke-FreeIPAAPIIdrange_Del,Invoke-FreeIPAAPIIdrange_Find,Invoke-FreeIPAAPIIdrange_Mod,Invoke-FreeIPAAPIIdrange_Show,Invoke-FreeIPAAPIIdview_Add,Invoke-FreeIPAAPIIdview_Apply,Invoke-FreeIPAAPIIdview_Del,Invoke-FreeIPAAPIIdview_Find,Invoke-FreeIPAAPIIdview_Mod,Invoke-FreeIPAAPIIdview_Show,Invoke-FreeIPAAPIIdview_Unapply,Invoke-FreeIPAAPIJoin,Invoke-FreeIPAAPIJson_Metadata,Invoke-FreeIPAAPIKra_Is_Enabled,Invoke-FreeIPAAPIKrbtpolicy_Mod,Invoke-FreeIPAAPIKrbtpolicy_Reset,Invoke-FreeIPAAPIKrbtpolicy_Show,Invoke-FreeIPAAPILocation_Add,Invoke-FreeIPAAPILocation_Del,Invoke-FreeIPAAPILocation_Find,Invoke-FreeIPAAPILocation_Mod,Invoke-FreeIPAAPILocation_Show,Invoke-FreeIPAAPIMigrate_Ds,Invoke-FreeIPAAPINetgroup_Add,Invoke-FreeIPAAPINetgroup_Add_Member,Invoke-FreeIPAAPINetgroup_Del,Invoke-FreeIPAAPINetgroup_Find,Invoke-FreeIPAAPINetgroup_Mod,Invoke-FreeIPAAPINetgroup_Remove_Member,Invoke-FreeIPAAPINetgroup_Show,Invoke-FreeIPAAPIOtpconfig_Mod,Invoke-FreeIPAAPIOtpconfig_Show,Invoke-FreeIPAAPIOtptoken_Add,Invoke-FreeIPAAPIOtptoken_Add_Managedby,Invoke-FreeIPAAPIOtptoken_Del,Invoke-FreeIPAAPIOtptoken_Find,Invoke-FreeIPAAPIOtptoken_Mod,Invoke-FreeIPAAPIOtptoken_Remove_Managedby,Invoke-FreeIPAAPIOtptoken_Show,Invoke-FreeIPAAPIOutput_Find,Invoke-FreeIPAAPIOutput_Show,Invoke-FreeIPAAPIParam_Find,Invoke-FreeIPAAPIParam_Show,Invoke-FreeIPAAPIPasswd,Invoke-FreeIPAAPIPermission_Add,Invoke-FreeIPAAPIPermission_Add_Member,Invoke-FreeIPAAPIPermission_Add_Noaci,Invoke-FreeIPAAPIPermission_Del,Invoke-FreeIPAAPIPermission_Find,Invoke-FreeIPAAPIPermission_Mod,Invoke-FreeIPAAPIPermission_Remove_Member,Invoke-FreeIPAAPIPermission_Show,Invoke-FreeIPAAPIPing,Invoke-FreeIPAAPIPkinit_Status,Invoke-FreeIPAAPIPlugins,Invoke-FreeIPAAPIPrivilege_Add,Invoke-FreeIPAAPIPrivilege_Add_Member,Invoke-FreeIPAAPIPrivilege_Add_Permission,Invoke-FreeIPAAPIPrivilege_Del,Invoke-FreeIPAAPIPrivilege_Find,Invoke-FreeIPAAPIPrivilege_Mod,Invoke-FreeIPAAPIPrivilege_Remove_Member,Invoke-FreeIPAAPIPrivilege_Remove_Permission,Invoke-FreeIPAAPIPrivilege_Show,Invoke-FreeIPAAPIPwpolicy_Add,Invoke-FreeIPAAPIPwpolicy_Del,Invoke-FreeIPAAPIPwpolicy_Find,Invoke-FreeIPAAPIPwpolicy_Mod,Invoke-FreeIPAAPIPwpolicy_Show,Invoke-FreeIPAAPIRadiusproxy_Add,Invoke-FreeIPAAPIRadiusproxy_Del,Invoke-FreeIPAAPIRadiusproxy_Find,Invoke-FreeIPAAPIRadiusproxy_Mod,Invoke-FreeIPAAPIRadiusproxy_Show,Invoke-FreeIPAAPIRealmdomains_Mod,Invoke-FreeIPAAPIRealmdomains_Show,Invoke-FreeIPAAPIRole_Add,Invoke-FreeIPAAPIRole_Add_Member,Invoke-FreeIPAAPIRole_Add_Privilege,Invoke-FreeIPAAPIRole_Del,Invoke-FreeIPAAPIRole_Find,Invoke-FreeIPAAPIRole_Mod,Invoke-FreeIPAAPIRole_Remove_Member,Invoke-FreeIPAAPIRole_Remove_Privilege,Invoke-FreeIPAAPIRole_Show,Invoke-FreeIPAAPISchema,Invoke-FreeIPAAPISelfservice_Add,Invoke-FreeIPAAPISelfservice_Del,Invoke-FreeIPAAPISelfservice_Find,Invoke-FreeIPAAPISelfservice_Mod,Invoke-FreeIPAAPISelfservice_Show,Invoke-FreeIPAAPISelinuxusermap_Add,Invoke-FreeIPAAPISelinuxusermap_Add_Host,Invoke-FreeIPAAPISelinuxusermap_Add_User,Invoke-FreeIPAAPISelinuxusermap_Del,Invoke-FreeIPAAPISelinuxusermap_Disable,Invoke-FreeIPAAPISelinuxusermap_Enable,Invoke-FreeIPAAPISelinuxusermap_Find,Invoke-FreeIPAAPISelinuxusermap_Mod,Invoke-FreeIPAAPISelinuxusermap_Remove_Host,Invoke-FreeIPAAPISelinuxusermap_Remove_User,Invoke-FreeIPAAPISelinuxusermap_Show,Invoke-FreeIPAAPIServer_Conncheck,Invoke-FreeIPAAPIServer_Del,Invoke-FreeIPAAPIServer_Find,Invoke-FreeIPAAPIServer_Mod,Invoke-FreeIPAAPIServer_Role_Find,Invoke-FreeIPAAPIServer_Role_Show,Invoke-FreeIPAAPIServer_Show,Invoke-FreeIPAAPIServer_State,Invoke-FreeIPAAPIServicedelegationrule_Add,Invoke-FreeIPAAPIServicedelegationrule_Add_Member,Invoke-FreeIPAAPIServicedelegationrule_Add_Target,Invoke-FreeIPAAPIServicedelegationrule_Del,Invoke-FreeIPAAPIServicedelegationrule_Find,Invoke-FreeIPAAPIServicedelegationrule_Remove_Member,Invoke-FreeIPAAPIServicedelegationrule_Remove_Target,Invoke-FreeIPAAPIServicedelegationrule_Show,Invoke-FreeIPAAPIServicedelegationtarget_Add,Invoke-FreeIPAAPIServicedelegationtarget_Add_Member,Invoke-FreeIPAAPIServicedelegationtarget_Del,Invoke-FreeIPAAPIServicedelegationtarget_Find,Invoke-FreeIPAAPIServicedelegationtarget_Remove_Member,Invoke-FreeIPAAPIServicedelegationtarget_Show,Invoke-FreeIPAAPIService_Add,Invoke-FreeIPAAPIService_Add_Cert,Invoke-FreeIPAAPIService_Add_Host,Invoke-FreeIPAAPIService_Add_Principal,Invoke-FreeIPAAPIService_Add_Smb,Invoke-FreeIPAAPIService_Allow_Create_Keytab,Invoke-FreeIPAAPIService_Allow_Retrieve_Keytab,Invoke-FreeIPAAPIService_Del,Invoke-FreeIPAAPIService_Disable,Invoke-FreeIPAAPIService_Disallow_Create_Keytab,Invoke-FreeIPAAPIService_Disallow_Retrieve_Keytab,Invoke-FreeIPAAPIService_Find,Invoke-FreeIPAAPIService_Mod,Invoke-FreeIPAAPIService_Remove_Cert,Invoke-FreeIPAAPIService_Remove_Host,Invoke-FreeIPAAPIService_Remove_Principal,Invoke-FreeIPAAPIService_Show,Invoke-FreeIPAAPISession_Logout,Invoke-FreeIPAAPISidgen_Was_Run,Invoke-FreeIPAAPIStageuser_Activate,Invoke-FreeIPAAPIStageuser_Add,Invoke-FreeIPAAPIStageuser_Add_Cert,Invoke-FreeIPAAPIStageuser_Add_Certmapdata,Invoke-FreeIPAAPIStageuser_Add_Manager,Invoke-FreeIPAAPIStageuser_Add_Principal,Invoke-FreeIPAAPIStageuser_Del,Invoke-FreeIPAAPIStageuser_Find,Invoke-FreeIPAAPIStageuser_Mod,Invoke-FreeIPAAPIStageuser_Remove_Cert,Invoke-FreeIPAAPIStageuser_Remove_Certmapdata,Invoke-FreeIPAAPIStageuser_Remove_Manager,Invoke-FreeIPAAPIStageuser_Remove_Principal,Invoke-FreeIPAAPIStageuser_Show,Invoke-FreeIPAAPISudocmdgroup_Add,Invoke-FreeIPAAPISudocmdgroup_Add_Member,Invoke-FreeIPAAPISudocmdgroup_Del,Invoke-FreeIPAAPISudocmdgroup_Find,Invoke-FreeIPAAPISudocmdgroup_Mod,Invoke-FreeIPAAPISudocmdgroup_Remove_Member,Invoke-FreeIPAAPISudocmdgroup_Show,Invoke-FreeIPAAPISudocmd_Add,Invoke-FreeIPAAPISudocmd_Del,Invoke-FreeIPAAPISudocmd_Find,Invoke-FreeIPAAPISudocmd_Mod,Invoke-FreeIPAAPISudocmd_Show,Invoke-FreeIPAAPISudorule_Add,Invoke-FreeIPAAPISudorule_Add_Allow_Command,Invoke-FreeIPAAPISudorule_Add_Deny_Command,Invoke-FreeIPAAPISudorule_Add_Host,Invoke-FreeIPAAPISudorule_Add_Option,Invoke-FreeIPAAPISudorule_Add_Runasgroup,Invoke-FreeIPAAPISudorule_Add_Runasuser,Invoke-FreeIPAAPISudorule_Add_User,Invoke-FreeIPAAPISudorule_Del,Invoke-FreeIPAAPISudorule_Disable,Invoke-FreeIPAAPISudorule_Enable,Invoke-FreeIPAAPISudorule_Find,Invoke-FreeIPAAPISudorule_Mod,Invoke-FreeIPAAPISudorule_Remove_Allow_Command,Invoke-FreeIPAAPISudorule_Remove_Deny_Command,Invoke-FreeIPAAPISudorule_Remove_Host,Invoke-FreeIPAAPISudorule_Remove_Option,Invoke-FreeIPAAPISudorule_Remove_Runasgroup,Invoke-FreeIPAAPISudorule_Remove_Runasuser,Invoke-FreeIPAAPISudorule_Remove_User,Invoke-FreeIPAAPISudorule_Show,Invoke-FreeIPAAPITopic_Find,Invoke-FreeIPAAPITopic_Show,Invoke-FreeIPAAPITopologysegment_Add,Invoke-FreeIPAAPITopologysegment_Del,Invoke-FreeIPAAPITopologysegment_Find,Invoke-FreeIPAAPITopologysegment_Mod,Invoke-FreeIPAAPITopologysegment_Reinitialize,Invoke-FreeIPAAPITopologysegment_Show,Invoke-FreeIPAAPITopologysuffix_Add,Invoke-FreeIPAAPITopologysuffix_Del,Invoke-FreeIPAAPITopologysuffix_Find,Invoke-FreeIPAAPITopologysuffix_Mod,Invoke-FreeIPAAPITopologysuffix_Show,Invoke-FreeIPAAPITopologysuffix_Verify,Invoke-FreeIPAAPITrustconfig_Mod,Invoke-FreeIPAAPITrustconfig_Show,Invoke-FreeIPAAPITrustdomain_Add,Invoke-FreeIPAAPITrustdomain_Del,Invoke-FreeIPAAPITrustdomain_Disable,Invoke-FreeIPAAPITrustdomain_Enable,Invoke-FreeIPAAPITrustdomain_Find,Invoke-FreeIPAAPITrustdomain_Mod,Invoke-FreeIPAAPITrust_Add,Invoke-FreeIPAAPITrust_Del,Invoke-FreeIPAAPITrust_Fetch_Domains,Invoke-FreeIPAAPITrust_Find,Invoke-FreeIPAAPITrust_Mod,Invoke-FreeIPAAPITrust_Resolve,Invoke-FreeIPAAPITrust_Show,Invoke-FreeIPAAPIUser_Add,Invoke-FreeIPAAPIUser_Add_Cert,Invoke-FreeIPAAPIUser_Add_Certmapdata,Invoke-FreeIPAAPIUser_Add_Manager,Invoke-FreeIPAAPIUser_Add_Principal,Invoke-FreeIPAAPIUser_Del,Invoke-FreeIPAAPIUser_Disable,Invoke-FreeIPAAPIUser_Enable,Invoke-FreeIPAAPIUser_Find,Invoke-FreeIPAAPIUser_Mod,Invoke-FreeIPAAPIUser_Remove_Cert,Invoke-FreeIPAAPIUser_Remove_Certmapdata,Invoke-FreeIPAAPIUser_Remove_Manager,Invoke-FreeIPAAPIUser_Remove_Principal,Invoke-FreeIPAAPIUser_Show,Invoke-FreeIPAAPIUser_Stage,Invoke-FreeIPAAPIUser_Status,Invoke-FreeIPAAPIUser_Undel,Invoke-FreeIPAAPIUser_Unlock,Invoke-FreeIPAAPIVaultconfig_Show,Invoke-FreeIPAAPIVaultcontainer_Add_Owner,Invoke-FreeIPAAPIVaultcontainer_Del,Invoke-FreeIPAAPIVaultcontainer_Remove_Owner,Invoke-FreeIPAAPIVaultcontainer_Show,Invoke-FreeIPAAPIVault_Add_Internal,Invoke-FreeIPAAPIVault_Add_Member,Invoke-FreeIPAAPIVault_Add_Owner,Invoke-FreeIPAAPIVault_Archive_Internal,Invoke-FreeIPAAPIVault_Del,Invoke-FreeIPAAPIVault_Find,Invoke-FreeIPAAPIVault_Mod_Internal,Invoke-FreeIPAAPIVault_Remove_Member,Invoke-FreeIPAAPIVault_Remove_Owner,Invoke-FreeIPAAPIVault_Retrieve_Internal,Invoke-FreeIPAAPIVault_Show,Invoke-FreeIPAAPIWhoami,Set-FreeIPAAPICredentials,Import-FreeIPAAPICrendentials,Set-FreeIPAAPIServerConfig,Get-FreeIPAAPIAuthenticationCookie,Set-FreeIPAProxy
+Export-ModuleMember -Alias Add-IPAAci,Remove-IPAAci,Find-IPAAci,Set-IPAAci,Rename-IPAAci,Show-IPAAci,Test-IPAAdtrustEnabled,Add-IPAAutomember,Add-IPAAutomemberCondition,remove-IPAAutomemberDefaultGroup,set-IPAAutomemberDefaultGroup,show-IPAAutomemberDefaultGroup,Remove-IPAAutomember,Find-IPAAutomember,Find-IPAAutomemberOrphans,Set-IPAAutomember,Build-IPAAutomember,Remove-IPAAutomemberCondition,Show-IPAAutomember,Add-IPAAutomountkey,Remove-IPAAutomountkey,Find-IPAAutomountkey,Set-IPAAutomountkey,Show-IPAAutomountkey,Add-IPAAutomountlocation,Remove-IPAAutomountlocation,Find-IPAAutomountlocation,Show-IPAAutomountlocation,Build-IPAFilesAutomountlocation,Add-IPAAutomountmap,Add-IPAAutomountmapIndirect,Remove-IPAAutomountmap,Find-IPAAutomountmap,Set-IPAAutomountmap,Show-IPAAutomountmap,Use-IPABatch,Add-IPACaacl,Add-IPACaaclCa,Add-IPACaaclHost,Add-IPACaaclProfile,Add-IPACaaclService,Add-IPACaaclUser,Remove-IPACaacl,Disable-IPACaacl,Enable-IPACaacl,Find-IPACaacl,Set-IPACaacl,Remove-IPACaaclCa,Remove-IPACaaclHost,Remove-IPACaaclProfile,Remove-IPACaaclService,Remove-IPACaaclUser,Show-IPACaacl,Add-IPACa,Remove-IPACa,Disable-IPACa,Enable-IPACa,Find-IPACa,Test-IPACaEnabled,Set-IPACa,Show-IPACa,Set-IPACertmapconfig,Show-IPACertmapconfig,Add-IPACertmaprule,Remove-IPACertmaprule,Disable-IPACertmaprule,Enable-IPACertmaprule,Find-IPACertmaprule,Set-IPACertmaprule,Show-IPACertmaprule,Search-IPAMatchCertmap,Remove-IPACertprofile,Find-IPACertprofile,Import-IPACertprofile,Set-IPACertprofile,Show-IPACertprofile,Find-IPACert,Remove-IPACertHold,Request-IPACert,Revoke-IPACert,Show-IPACert,Get-IPAStatusCert,Find-IPAClass,Show-IPAClass,Get-IPADefaultsDefaults,Find-IPACommand,Show-IPACommand,Test-IPACompatEnabled,Set-IPAConfig,Show-IPAConfig,Add-IPACosentry,Remove-IPACosentry,Find-IPACosentry,Set-IPACosentry,Show-IPACosentry,Add-IPADelegation,Remove-IPADelegation,Find-IPADelegation,Set-IPADelegation,Show-IPADelegation,Set-IPADnsconfig,Show-IPADnsconfig,Add-IPADnsforwardzone,Add-IPADnsforwardzonePermission,Remove-IPADnsforwardzone,Disable-IPADnsforwardzone,Enable-IPADnsforwardzone,Find-IPADnsforwardzone,Set-IPADnsforwardzone,Remove-IPADnsforwardzonePermission,Show-IPADnsforwardzone,Add-IPADnsrecord,Remove-IPADnsrecord,Remove-IPADnsrecordEntry,Find-IPADnsrecord,Set-IPADnsrecord,Show-IPADnsrecord,Split-IPADnsrecordParts,Find-IPADnsserver,Set-IPADnsserver,Show-IPADnsserver,Add-IPADnszone,Add-IPADnszonePermission,Remove-IPADnszone,Disable-IPADnszone,Enable-IPADnszone,Find-IPADnszone,Set-IPADnszone,Remove-IPADnszonePermission,Show-IPADnszone,Test-IPADnsEnabled,Resolve-IPADns,Update-IPADnsSystemRecords,Get-IPADomainlevel,Set-IPADomainlevel,Use-IPAEnv,Add-IPAGroup,Add-IPAGroupMember,Add-IPAGroupMemberManager,Remove-IPAGroup,Remove-IPAManagedGroup,Find-IPAGroup,Set-IPAGroup,Remove-IPAGroupMember,Remove-IPAGroupMemberManager,Show-IPAGroup,Add-IPAHbacrule,Add-IPAHbacruleHost,Add-IPAHbacruleService,Add-IPAHbacruleSourcehost,Add-IPAHbacruleUser,Remove-IPAHbacrule,Disable-IPAHbacrule,Enable-IPAHbacrule,Find-IPAHbacrule,Set-IPAHbacrule,Remove-IPAHbacruleHost,Remove-IPAHbacruleService,Remove-IPAHbacruleSourcehost,Remove-IPAHbacruleUser,Show-IPAHbacrule,Add-IPAHbacsvcgroup,Add-IPAHbacsvcgroupMember,Remove-IPAHbacsvcgroup,Find-IPAHbacsvcgroup,Set-IPAHbacsvcgroup,Remove-IPAHbacsvcgroupMember,Show-IPAHbacsvcgroup,Add-IPAHbacsvc,Remove-IPAHbacsvc,Find-IPAHbacsvc,Set-IPAHbacsvc,Show-IPAHbacsvc,Use-IPAHbactest,Add-IPAHostgroup,Add-IPAHostgroupMember,Add-IPAHostgroupMemberManager,Remove-IPAHostgroup,Find-IPAHostgroup,Set-IPAHostgroup,Remove-IPAHostgroupMember,Remove-IPAHostgroupMemberManager,Show-IPAHostgroup,Add-IPAHost,Add-IPAHostCert,Add-IPAHostManagedby,Add-IPAHostPrincipal,Approve-IPAHostCreateKeytab,Approve-IPAHostRetrieveKeytab,Remove-IPAHost,Disable-IPAHost,Deny-IPAHostCreateKeytab,Deny-IPAHostRetrieveKeytab,Find-IPAHost,Set-IPAHost,Remove-IPAHostCert,Remove-IPAHostManagedby,Remove-IPAHostPrincipal,Show-IPAHost,Get-IPAMessagesI18n,Add-IPAIdoverridegroup,Remove-IPAIdoverridegroup,Find-IPAIdoverridegroup,Set-IPAIdoverridegroup,Show-IPAIdoverridegroup,Add-IPAIdoverrideuser,Add-IPAIdoverrideuserCert,Remove-IPAIdoverrideuser,Find-IPAIdoverrideuser,Set-IPAIdoverrideuser,Remove-IPAIdoverrideuserCert,Show-IPAIdoverrideuser,Add-IPAIdrange,Remove-IPAIdrange,Find-IPAIdrange,Set-IPAIdrange,Show-IPAIdrange,Add-IPAIdview,Publish-IPAIdview,Remove-IPAIdview,Find-IPAIdview,Set-IPAIdview,Show-IPAIdview,Undo-IPAIdview,Use-IPAJoin,Get-IPAMetadata,Test-IPAKraEnabled,Set-IPAKrbtpolicy,Reset-IPAKrbtpolicy,Show-IPAKrbtpolicy,Add-IPALocation,Remove-IPALocation,Find-IPALocation,Set-IPALocation,Show-IPALocation,Do-IPADsMigrate,Add-IPANetgroup,Add-IPANetgroupMember,Remove-IPANetgroup,Find-IPANetgroup,Set-IPANetgroup,Remove-IPANetgroupMember,Show-IPANetgroup,Set-IPAOtpconfig,Show-IPAOtpconfig,Add-IPAOtptoken,Add-IPAOtptokenManagedby,Remove-IPAOtptoken,Find-IPAOtptoken,Set-IPAOtptoken,Remove-IPAOtptokenManagedby,Show-IPAOtptoken,Find-IPAOutput,Show-IPAOutput,Find-IPAParam,Show-IPAParam,Use-IPAPasswd,Add-IPAPermission,Add-IPAPermissionMember,Add-IPAPermissionNoaci,Remove-IPAPermission,Find-IPAPermission,Set-IPAPermission,Remove-IPAPermissionMember,Show-IPAPermission,Use-IPAPing,Get-IPAStatusPkinit,Use-IPAPlugins,Add-IPAPrivilege,Add-IPAPrivilegeMember,Add-IPAPrivilegePermission,Remove-IPAPrivilege,Find-IPAPrivilege,Set-IPAPrivilege,Remove-IPAPrivilegeMember,Remove-IPAPrivilegePermission,Show-IPAPrivilege,Add-IPAPwpolicy,Remove-IPAPwpolicy,Find-IPAPwpolicy,Set-IPAPwpolicy,Show-IPAPwpolicy,Add-IPARadiusproxy,Remove-IPARadiusproxy,Find-IPARadiusproxy,Set-IPARadiusproxy,Show-IPARadiusproxy,Set-IPARealmdomains,Show-IPARealmdomains,Add-IPARole,Add-IPARoleMember,Add-IPARolePrivilege,Remove-IPARole,Find-IPARole,Set-IPARole,Remove-IPARoleMember,Remove-IPARolePrivilege,Show-IPARole,Use-IPASchema,Add-IPASelfservice,Remove-IPASelfservice,Find-IPASelfservice,Set-IPASelfservice,Show-IPASelfservice,Add-IPASelinuxusermap,Add-IPASelinuxusermapHost,Add-IPASelinuxusermapUser,Remove-IPASelinuxusermap,Disable-IPASelinuxusermap,Enable-IPASelinuxusermap,Find-IPASelinuxusermap,Set-IPASelinuxusermap,Remove-IPASelinuxusermapHost,Remove-IPASelinuxusermapUser,Show-IPASelinuxusermap,Test-IPAConnection,Remove-IPAServer,Find-IPAServer,Set-IPAServer,Find-IPAServerRole,Show-IPAServerRole,Show-IPAServer,State-IPAServer,Add-IPAServicedelegationrule,Add-IPAServicedelegationruleMember,Add-IPAServicedelegationruleTarget,Remove-IPAServicedelegationrule,Find-IPAServicedelegationrule,Remove-IPAServicedelegationruleMember,Remove-IPAServicedelegationruleTarget,Show-IPAServicedelegationrule,Add-IPAServicedelegationtarget,Add-IPAServicedelegationtargetMember,Remove-IPAServicedelegationtarget,Find-IPAServicedelegationtarget,Remove-IPAServicedelegationtargetMember,Show-IPAServicedelegationtarget,Add-IPAService,Add-IPAServiceCert,Add-IPAServiceHost,Add-IPAServicePrincipal,Add-IPAServiceSmb,Approve-IPAServiceCreateKeytab,Approve-IPAServiceRetrieveKeytab,Remove-IPAService,Disable-IPAService,Deny-IPAServiceCreateKeytab,Deny-IPAServiceRetrieveKeytab,Find-IPAService,Set-IPAService,Remove-IPAServiceCert,Remove-IPAServiceHost,Remove-IPAServicePrincipal,Show-IPAService,Disconnect-IPA,Get-IPAStatusSidgenRun,Enable-IPAStageuser,Add-IPAStageuser,Add-IPAStageuserCert,Add-IPAStageuserCertmapdata,Add-IPAStageuserManager,Add-IPAStageuserPrincipal,Remove-IPAStageuser,Find-IPAStageuser,Set-IPAStageuser,Remove-IPAStageuserCert,Remove-IPAStageuserCertmapdata,Remove-IPAStageuserManager,Remove-IPAStageuserPrincipal,Show-IPAStageuser,Add-IPASudocmdgroup,Add-IPASudocmdgroupMember,Remove-IPASudocmdgroup,Find-IPASudocmdgroup,Set-IPASudocmdgroup,Remove-IPASudocmdgroupMember,Show-IPASudocmdgroup,Add-IPASudocmd,Remove-IPASudocmd,Find-IPASudocmd,Set-IPASudocmd,Show-IPASudocmd,Add-IPASudorule,Add-IPASudoruleAllowCommand,Add-IPASudoruleDenyCommand,Add-IPASudoruleHost,Add-IPASudoruleOption,Add-IPASudoruleRunasgroup,Add-IPASudoruleRunasuser,Add-IPASudoruleUser,Remove-IPASudorule,Disable-IPASudorule,Enable-IPASudorule,Find-IPASudorule,Set-IPASudorule,Remove-IPASudoruleAllowCommand,Remove-IPASudoruleDenyCommand,Remove-IPASudoruleHost,Remove-IPASudoruleOption,Remove-IPASudoruleRunasgroup,Remove-IPASudoruleRunasuser,Remove-IPASudoruleUser,Show-IPASudorule,Find-IPATopic,Show-IPATopic,Add-IPATopologysegment,Remove-IPATopologysegment,Find-IPATopologysegment,Set-IPATopologysegment,Initialize-IPATopologysegment,Show-IPATopologysegment,Add-IPATopologysuffix,Remove-IPATopologysuffix,Find-IPATopologysuffix,Set-IPATopologysuffix,Show-IPATopologysuffix,Confirm-IPATopologysuffix,Set-IPATrustconfig,Show-IPATrustconfig,Add-IPATrustdomain,Remove-IPATrustdomain,Disable-IPATrustdomain,Enable-IPATrustdomain,Find-IPATrustdomain,Set-IPATrustdomain,Add-IPATrust,Remove-IPATrust,Build-IPATrustDomains,Find-IPATrust,Set-IPATrust,Resolve-IPATrust,Show-IPATrust,Add-IPAUser,Add-IPAUserCert,Add-IPAUserCertmapdata,Add-IPAUserManager,Add-IPAUserPrincipal,Remove-IPAUser,Disable-IPAUser,Enable-IPAUser,Find-IPAUser,Set-IPAUser,Remove-IPAUserCert,Remove-IPAUserCertmapdata,Remove-IPAUserManager,Remove-IPAUserPrincipal,Show-IPAUser,Move-IPADelToStageUser,Get-IPAStatusUser,Restore-IPAUser,Unlock-IPAUser,Show-IPAVaultconfig,Add-IPAVaultcontainerOwner,Remove-IPAVaultcontainer,Remove-IPAVaultcontainerOwner,Show-IPAVaultcontainer,Add-IPAVaultInternal,Add-IPAVaultMember,Add-IPAVaultOwner,Move-IPAToArchiveVaultInternal,Remove-IPAVault,Find-IPAVault,Set-IPAVaultInternal,Remove-IPAVaultMember,Remove-IPAVaultOwner,Get-IPAVaultInternal,Show-IPAVault,Use-IPAWhoami,Set-IPACredentials,Import-IPACrendentials,Set-IPAServerConfig,Connect-IPA,Set-IPAProxy

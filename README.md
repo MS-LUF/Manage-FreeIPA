@@ -1,12 +1,14 @@
-![image](https://www.freeipa.org/images/freeipa/freeipa-logo.png)
 # Manage-FreeIPA
 Add few PowerShell cmdlets to manage a FreeIPA server through his JSONRPC web API - https://github.com/freeipa/freeipa
 
-(c) 2018-2019 lucas-cueff.com Distributed under Artistic Licence 2.0 (https://opensource.org/licenses/artistic-license-2.0).
+(c) 2018-2020 lucas-cueff.com Distributed under Artistic Licence 2.0 (https://opensource.org/licenses/artistic-license-2.0).
 
 ## Description
 Manage-FreeIPA.psm1 PowerShell module provides a command line interface to manage your FreeIPA/IPA infrastructure from Powershell (Core/Classic - Windows/Linux/Mac Os).
 Cmdlets and Alias respect the Powershell verb naming convention. All the parameters are based on the IPA Python cli embedded in the product.
+
+## Version
+v0.9 : Add multi config file as requested by baldator + Fix securestring issue reported by nadinezan + add proxy management to connect to IPA + simplify error management in catch + build from last IPA version
 
 ## Functions, alias and naming convention
 ### Functions
@@ -19,15 +21,16 @@ The idea of each alias is to be closed to classic cmdlet like Active Directory o
 
 ## Packaging
 This module is generated dynamically using my other project Build-FreeIPAModule (https://github.com/MS-LUF/Build-FreeIPAModule)
+This module is generated using the last API FreeIPA version available online on official FreeIPA Demo environment (https://www.freeipa.org/page/Demo)
 
 ## Note
 For more information on the FreeIPA API, please connect to the web interface on your IPA Server : https://yourIPA.domain.tld/ipa/ui/#/p/apibrowser/type=command
-Don't forget to trust your IPA AC / ssl certificate locally before using the Powershell Module.
+**Don't forget to trust your IPA AC / ssl certificate locally before using the Powershell Module.**
 
 ## Documentation
 All docs are available in Mardown format under docs folder. Currently only my custom functions are fill, the other one are quite empty and will be filled soon.
 
-## Install Manage-FreeIPA from PowerShell Gallery repository
+## Install Manage-ADShadowGroup from PowerShell Gallery repository
 You can easily install it from powershell gallery repository https://www.powershellgallery.com/packages/Manage-FreeIPA/ using a simple powershell command and an internet access :-)
 ```
 	Install-Module -Name Manage-FreeIPA
@@ -56,6 +59,7 @@ You can easily install it from powershell gallery repository https://www.powersh
 - Invoke-FreeIPAAPIautomember_default_group_show
 - Invoke-FreeIPAAPIautomember_del
 - Invoke-FreeIPAAPIautomember_find
+- Invoke-FreeIPAAPIautomember_find_orphans
 - Invoke-FreeIPAAPIautomember_mod
 - Invoke-FreeIPAAPIautomember_rebuild
 - Invoke-FreeIPAAPIautomember_remove_condition
@@ -179,11 +183,13 @@ You can easily install it from powershell gallery repository https://www.powersh
 - Invoke-FreeIPAAPIenv
 - Invoke-FreeIPAAPIgroup_add
 - Invoke-FreeIPAAPIgroup_add_member
+- Invoke-FreeIPAAPIgroup_add_member_manager
 - Invoke-FreeIPAAPIgroup_del
 - Invoke-FreeIPAAPIgroup_detach
 - Invoke-FreeIPAAPIgroup_find
 - Invoke-FreeIPAAPIgroup_mod
 - Invoke-FreeIPAAPIgroup_remove_member
+- Invoke-FreeIPAAPIgroup_remove_member_manager
 - Invoke-FreeIPAAPIgroup_show
 - Invoke-FreeIPAAPIhbacrule_add
 - Invoke-FreeIPAAPIhbacrule_add_host
@@ -215,10 +221,12 @@ You can easily install it from powershell gallery repository https://www.powersh
 - Invoke-FreeIPAAPIhbactest
 - Invoke-FreeIPAAPIhostgroup_add
 - Invoke-FreeIPAAPIhostgroup_add_member
+- Invoke-FreeIPAAPIhostgroup_add_member_manager
 - Invoke-FreeIPAAPIhostgroup_del
 - Invoke-FreeIPAAPIhostgroup_find
 - Invoke-FreeIPAAPIhostgroup_mod
 - Invoke-FreeIPAAPIhostgroup_remove_member
+- Invoke-FreeIPAAPIhostgroup_remove_member_manager
 - Invoke-FreeIPAAPIhostgroup_show
 - Invoke-FreeIPAAPIhost_add
 - Invoke-FreeIPAAPIhost_add_cert
@@ -359,6 +367,7 @@ You can easily install it from powershell gallery repository https://www.powersh
 - Invoke-FreeIPAAPIserver_role_find
 - Invoke-FreeIPAAPIserver_role_show
 - Invoke-FreeIPAAPIserver_show
+- Invoke-FreeIPAAPIserver_state
 - Invoke-FreeIPAAPIservicedelegationrule_add
 - Invoke-FreeIPAAPIservicedelegationrule_add_member
 - Invoke-FreeIPAAPIservicedelegationrule_add_target
@@ -377,6 +386,7 @@ You can easily install it from powershell gallery repository https://www.powersh
 - Invoke-FreeIPAAPIservice_add_cert
 - Invoke-FreeIPAAPIservice_add_host
 - Invoke-FreeIPAAPIservice_add_principal
+- Invoke-FreeIPAAPIservice_add_smb
 - Invoke-FreeIPAAPIservice_allow_create_keytab
 - Invoke-FreeIPAAPIservice_allow_retrieve_keytab
 - Invoke-FreeIPAAPIservice_del
@@ -504,7 +514,8 @@ You can easily install it from powershell gallery repository https://www.powersh
 - Invoke-FreeIPAAPIvault_show
 - Invoke-FreeIPAAPIwhoami
 - Set-FreeIPAAPICredentials
-- Set-FreeIPAAPIServerConfig                       
+- Set-FreeIPAAPIServerConfig
+- Set-FreeIPAProxy                    
 ### Alias
 - Add-IPAAci
 - Add-IPAAutomember
@@ -530,6 +541,7 @@ You can easily install it from powershell gallery repository https://www.powersh
 - Add-IPADnszonePermission
 - Add-IPAGroup
 - Add-IPAGroupMember
+- Add-IPAGroupMemberManager
 - Add-IPAHbacrule
 - Add-IPAHbacruleHost
 - Add-IPAHbacruleService
@@ -542,6 +554,7 @@ You can easily install it from powershell gallery repository https://www.powersh
 - Add-IPAHostCert
 - Add-IPAHostgroup
 - Add-IPAHostgroupMember
+- Add-IPAHostgroupMemberManager
 - Add-IPAHostManagedby
 - Add-IPAHostPrincipal
 - Add-IPAIdoverridegroup
@@ -578,6 +591,7 @@ You can easily install it from powershell gallery repository https://www.powersh
 - Add-IPAServicedelegationtargetMember
 - Add-IPAServiceHost
 - Add-IPAServicePrincipal
+- Add-IPAServiceSmb
 - Add-IPAStageuser
 - Add-IPAStageuserCert
 - Add-IPAStageuserCertmapdata
@@ -647,6 +661,7 @@ You can easily install it from powershell gallery repository https://www.powersh
 - Enable-IPAUser
 - Find-IPAAci
 - Find-IPAAutomember
+- Find-IPAAutomemberOrphans
 - Find-IPAAutomountkey
 - Find-IPAAutomountlocation
 - Find-IPAAutomountmap
@@ -743,6 +758,7 @@ You can easily install it from powershell gallery repository https://www.powersh
 - Remove-IPADnszonePermission
 - Remove-IPAGroup
 - Remove-IPAGroupMember
+- Remove-IPAGroupMemberManager
 - Remove-IPAHbacrule
 - Remove-IPAHbacruleHost
 - Remove-IPAHbacruleService
@@ -755,6 +771,7 @@ You can easily install it from powershell gallery repository https://www.powersh
 - Remove-IPAHostCert
 - Remove-IPAHostgroup
 - Remove-IPAHostgroupMember
+- Remove-IPAHostgroupMemberManager
 - Remove-IPAHostManagedby
 - Remove-IPAHostPrincipal
 - Remove-IPAIdoverridegroup
@@ -867,6 +884,7 @@ You can easily install it from powershell gallery repository https://www.powersh
 - Set-IPAOtptoken
 - Set-IPAPermission
 - Set-IPAPrivilege
+- Set-IPAProxy
 - Set-IPAPwpolicy
 - Set-IPARadiusproxy
 - Set-IPARealmdomains
@@ -953,6 +971,7 @@ You can easily install it from powershell gallery repository https://www.powersh
 - Show-IPAVaultconfig
 - Show-IPAVaultcontainer
 - Split-IPADnsrecordParts
+- State-IPAServer
 - Test-IPAAdtrustEnabled
 - Test-IPACaEnabled
 - Test-IPACompatEnabled
@@ -972,6 +991,11 @@ You can easily install it from powershell gallery repository https://www.powersh
 - Use-IPASchema
 - Use-IPAWhoami
 ## Use the module
+### Managing your network access to IPA front end through web proxy
+You can set a proxy (with authentication or not, direct connection...). For instance, to set a proxy with a SSO with current security context :
+```
+    C:\PS>Set-IPAProxy -proxy "http://myproxy:3128" -ProxyUseDefaultCredentials
+```
 ### Set your config and be authenticated with your server
 Set your encrypted credential in cache for future use and set it also in an external file if necessary (EncryptKeyInLocalFile and MasterPassword)
 ```
