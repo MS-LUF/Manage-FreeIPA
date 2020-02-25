@@ -5,20 +5,21 @@ online version:
 schema: 2.0.0
 ---
 
-# Invoke-FreeIPAAPIcosentry_mod
+# Invoke-FreeIPAAPIautomember_find_orphans
 
 ## SYNOPSIS
 
 ## SYNTAX
 
 ```
-Invoke-FreeIPAAPIcosentry_mod [[-krbpwdpolicyreference] <String>] [[-cospriority] <Int32>]
- [[-setattr] <String[]>] [[-addattr] <String[]>] [[-delattr] <String[]>] [-rights] [-all] [-raw]
- [[-version] <String>] [-cn] <String> [-FullResultsOutput] [<CommonParameters>]
+Invoke-FreeIPAAPIautomember_find_orphans [[-desc] <String>] [-type] <String> [-remove] [-all] [-raw]
+ [[-version] <String>] [-pkey_only] [[-criteria] <String>] [-FullResultsOutput] [<CommonParameters>]
 ```
 
 ## DESCRIPTION
-Modify Class of Service entry
+Search for orphan automember rules.
+The command might need to be run as
+a privileged user user to get all orphan rules.
 
 ## EXAMPLES
 
@@ -31,8 +32,8 @@ PS C:\> {{ Add example code here }}
 
 ## PARAMETERS
 
-### -krbpwdpolicyreference
-\<krbpwdpolicyreference\>
+### -desc
+A description of this auto member rule
 
 ```yaml
 Type: String
@@ -46,76 +47,23 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -cospriority
-\<cospriority\>
+### -type
+Grouping to which the rule applies
 
 ```yaml
-Type: Int32
+Type: String
 Parameter Sets: (All)
 Aliases:
 
-Required: False
+Required: True
 Position: 2
-Default value: 0
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -setattr
-Set an attribute to a name/value pair.
-Format is attr=value.
-For multi-valued attributes, the command replaces the values already present.
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 3
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -addattr
-Add an attribute/value pair.
-Format is attr=value.
-The attribute
-must be part of the schema.
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 4
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -delattr
-Delete an attribute/value pair.
-The option will be evaluated
-last, after all sets and adds.
-
-```yaml
-Type: String[]
-Parameter Sets: (All)
-Aliases:
-
-Required: False
-Position: 5
-Default value: None
-Accept pipeline input: False
-Accept wildcard characters: False
-```
-
-### -rights
-Display the access rights of this entry (requires -all).
-See ipa man page for details.
+### -remove
+Remove orphan automember rules
 
 ```yaml
 Type: SwitchParameter
@@ -171,22 +119,37 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 6
+Position: 3
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
-### -cn
-\<cn\>
+### -pkey_only
+Results should contain primary key attribute only ("automember-rule")
+
+```yaml
+Type: SwitchParameter
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: Named
+Default value: False
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
+### -criteria
+A string searched in all relevant object attributes
 
 ```yaml
 Type: String
 Parameter Sets: (All)
 Aliases:
 
-Required: True
-Position: 7
+Required: False
+Position: 4
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False

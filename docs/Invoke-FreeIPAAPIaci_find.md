@@ -21,22 +21,22 @@ Invoke-FreeIPAAPIaci_find [[-name] <String>] [[-permission] <String>] [[-group] 
 ## DESCRIPTION
 Search for ACIs.
 
-Returns a list of ACIs
+    Returns a list of ACIs
 
-EXAMPLES:
+    EXAMPLES:
 
- To find all ACIs that apply directly to members of the group ipausers:
-   ipa aci-find -memberof=ipausers
+     To find all ACIs that apply directly to members of the group ipausers:
+       ipa aci-find -memberof=ipausers
 
- To find all ACIs that grant add access:
-   ipa aci-find -permissions=add
+     To find all ACIs that grant add access:
+       ipa aci-find -permissions=add
 
-Note that the find command only looks for the given text in the set of
-ACIs, it does not evaluate the ACIs to see if something would apply.
-For example, searching on memberof=ipausers will find all ACIs that
-have ipausers as a memberof.
+    Note that the find command only looks for the given text in the set of
+    ACIs, it does not evaluate the ACIs to see if something would apply.
+    For example, searching on memberof=ipausers will find all ACIs that
+    have ipausers as a memberof.
 There may be other ACIs that apply to
-members of that group indirectly.
+    members of that group indirectly.
 
 ## EXAMPLES
 
@@ -309,7 +309,7 @@ Accept wildcard characters: False
 ```
 
 ### -FullResultsOutput
-{{Fill FullResultsOutput Description}}
+{{ Fill FullResultsOutput Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -324,8 +324,7 @@ Accept wildcard characters: False
 ```
 
 ### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.
-For more information, see about_CommonParameters (http://go.microsoft.com/fwlink/?LinkID=113216).
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS
 

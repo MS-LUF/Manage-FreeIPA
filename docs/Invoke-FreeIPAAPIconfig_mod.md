@@ -12,8 +12,8 @@ schema: 2.0.0
 ## SYNTAX
 
 ```
-Invoke-FreeIPAAPIconfig_mod [[-maxusername] <Int32>] [[-homedirectory] <String>] [[-defaultshell] <String>]
- [[-defaultgroup] <String>] [[-emaildomain] <String>] [[-searchtimelimit] <Int32>]
+Invoke-FreeIPAAPIconfig_mod [[-maxusername] <Int32>] [[-maxhostname] <Int32>] [[-homedirectory] <String>]
+ [[-defaultshell] <String>] [[-defaultgroup] <String>] [[-emaildomain] <String>] [[-searchtimelimit] <Int32>]
  [[-searchrecordslimit] <Int32>] [[-usersearch] <String>] [[-groupsearch] <String>] [-enable_migration]
  [[-groupobjectclasses] <String[]>] [[-userobjectclasses] <String[]>] [[-pwdexpnotify] <Int32>]
  [[-ipaconfigstring] <String[]>] [[-ipaselinuxusermaporder] <String>] [[-ipaselinuxusermapdefault] <String>]
@@ -51,6 +51,21 @@ Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
+### -maxhostname
+Maximum hostname length
+
+```yaml
+Type: Int32
+Parameter Sets: (All)
+Aliases:
+
+Required: False
+Position: 2
+Default value: 0
+Accept pipeline input: False
+Accept wildcard characters: False
+```
+
 ### -homedirectory
 Default location of home directories
 
@@ -60,7 +75,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 2
+Position: 3
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -75,7 +90,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 3
+Position: 4
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -90,7 +105,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 4
+Position: 5
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -105,7 +120,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 5
+Position: 6
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -120,7 +135,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 6
+Position: 7
 Default value: 0
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -135,7 +150,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 7
+Position: 8
 Default value: 0
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -150,7 +165,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 8
+Position: 9
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -165,7 +180,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 9
+Position: 10
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -195,7 +210,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 10
+Position: 11
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -210,7 +225,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 11
+Position: 12
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -225,7 +240,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 12
+Position: 13
 Default value: 0
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -240,7 +255,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 13
+Position: 14
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -255,7 +270,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 14
+Position: 15
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -270,7 +285,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 15
+Position: 16
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -285,7 +300,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 16
+Position: 17
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -300,7 +315,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 17
+Position: 18
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -315,7 +330,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 18
+Position: 19
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -330,7 +345,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 19
+Position: 20
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -347,7 +362,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 20
+Position: 21
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -365,7 +380,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 21
+Position: 22
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -382,7 +397,7 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 22
+Position: 23
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
@@ -446,14 +461,14 @@ Parameter Sets: (All)
 Aliases:
 
 Required: False
-Position: 23
+Position: 24
 Default value: None
 Accept pipeline input: False
 Accept wildcard characters: False
 ```
 
 ### -FullResultsOutput
-{{Fill FullResultsOutput Description}}
+{{ Fill FullResultsOutput Description }}
 
 ```yaml
 Type: SwitchParameter
@@ -468,8 +483,7 @@ Accept wildcard characters: False
 ```
 
 ### CommonParameters
-This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable.
-For more information, see about_CommonParameters (http://go.microsoft.com/fwlink/?LinkID=113216).
+This cmdlet supports the common parameters: -Debug, -ErrorAction, -ErrorVariable, -InformationAction, -InformationVariable, -OutVariable, -OutBuffer, -PipelineVariable, -Verbose, -WarningAction, and -WarningVariable. For more information, see [about_CommonParameters](http://go.microsoft.com/fwlink/?LinkID=113216).
 
 ## INPUTS
 
